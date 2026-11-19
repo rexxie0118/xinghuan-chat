@@ -160,7 +160,9 @@ https://raw.githubusercontent.com/owner/repo/main/skills/pdf/SKILL.md
 GitHub Skill 通常没有单一入口脚本，所以导入后：
 
 - 有 `entrypoint`：Agent 模式执行脚本；
-- 没有 `entrypoint`：在有真实 LLM 的环境下，把 `SKILL.md` 作为 system instruction + 知识库证据作答；mock 环境回退 RAG。
+- 没有 `entrypoint`：这是 **Prompt Skill**，需要真实 LLM 读取 `SKILL.md`。配置 DeepSeek/ARK 后会把 Skill 指令 + 知识库证据交给模型；
+- mock 环境不会假装执行 Skill，而是明确提示「Prompt Skill 需要真实 LLM」，不再输出无关的 RAG 答案；
+- 想让 Skill 直接运行脚本，请给它配置 `entrypoint`，或按 Agent 类型导入。
 
 ### 本地上传
 

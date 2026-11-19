@@ -737,7 +737,8 @@
       `;
       item.querySelector(".agent-menu-name").textContent = agent.name;
       item.querySelector(".agent-menu-desc").textContent =
-        `${agentKind(agent)} · ${agent.files?.length || 0} 个文件 · ${agent.entrypoint || "无入口脚本"}`
+        `${agentKind(agent)} · ${agent.files?.length || 0} 个文件 · `
+        + (agent.entrypoint || (agent.kind === "skill" ? "Prompt Skill（需要模型）" : "无入口脚本"))
         + (agent.source_url ? ` · ${agent.source_url}` : "");
       item.addEventListener("click", () => selectAgent(agent.id));
       menu.append(item);
@@ -1324,6 +1325,7 @@
       else if (meta.mode === "rag") head.append(badge("Chat", ""));
       if (meta.answer_mode === "llm") head.append(badge("LLM 生成", "mint"));
       else if (meta.answer_mode === "extractive") head.append(badge("离线抽取", ""));
+      if (meta.requires_model) head.append(badge("需要 LLM", ""));
       if (meta.confidence && Number(meta.confidence) > 0) {
         head.append(badge(`置信度 ${Math.round(Number(meta.confidence) * 100)}%`, ""));
       }
@@ -2585,7 +2587,8 @@
       `;
       item.querySelector(".agent-menu-name").textContent = agent.name;
       item.querySelector(".agent-menu-desc").textContent =
-        `${agentKind(agent)} · ${agent.files?.length || 0} 个文件 · ${agent.entrypoint || "无入口脚本"}`
+        `${agentKind(agent)} · ${agent.files?.length || 0} 个文件 · `
+        + (agent.entrypoint || (agent.kind === "skill" ? "Prompt Skill（需要模型）" : "无入口脚本"))
         + (agent.source_url ? ` · ${agent.source_url}` : "");
       item.querySelector("button").addEventListener("click", async () => {
         const ok = await confirmDialog(

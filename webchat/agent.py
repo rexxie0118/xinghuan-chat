@@ -261,7 +261,7 @@ class AgentRunner:
         trace.append(
             _step(
                 f"加载导入 {kind_label}",
-                f"{agent.name} · {len(agent.files)} 个参考脚本"
+                f"{agent.name} · {len(agent.files)} 个参考文件"
                 + (f" · 入口 {agent.entrypoint}" if agent.entrypoint else " · 未配置入口脚本"),
                 kind="think",
             )
@@ -352,12 +352,61 @@ class AgentRunner:
                 warnings.append("脚本没有 stdout，已回退到知识库回答")
 
         else:
+            if agent.kind == "skill":
+                if kb.provider.is_mock:
+                    detail = (
+                        "这是 Prompt Skill：没有入口脚本，需要真实 LLM 读取 SKILL.md；"
+                        "当前 provider=mock，已回退知识库。配置 DeepSeek/ARK 后即可使用 Skill 指令。"
+                    )
+                    warnings.append("Prompt Skill 需要真实 LLM；当前 mock 模式无法执行 Skill 指令")
+                else:
+                    detail = "Prompt Skill 已加载，正在使用 SKILL.md 作为指令"
+                trace.append(_step("加载 Prompt Skill", detail, kind="think"))
+            else:
+                trace.append(
+                    _step(
+                        "未执行脚本",
+                        execution.get("reason", "没有可执行的入口脚本"),
+                        kind="error" if execution.get("reason") else "think",
+                    )
+                )
+
+        if agent.kind == "skill" and not execution.get("ran") and kb.provider.is_mock:
             trace.append(
                 _step(
-                    "未执行脚本",
-                    execution.get("reason", "没有可执行的入口脚本"),
-                    kind="think",
+                    "需要真实 LLM",
+                    "Prompt Skill 已加载，但 mock provider 无法读取 SKILL.md 生成内容",
+                    kind="error",
+                    status="error",
                 )
+            )
+            return AgentResult(
+                answer=(
+                    f"### {agent.name} 已加载\n\n"
+                    "这是一个 **Prompt Skill**：它没有独立入口脚本，需要真实 LLM 读取 "
+                    "`SKILL.md` 并按指令完成工作。\n\n"
+                    "当前知识库 provider 是 `mock`，无法执行 Skill 指令。请在 "
+                    "`webchat/.env` 中配置 DeepSeek / ARK 后重启服务，再选择这个 Skill 重试。\n\n"
+                    "如果你希望它直接运行脚本，可以给 Skill 配置 `entrypoint`，或按 Agent 类型导入。"
+                ),
+                citations=[],
+                trace=trace,
+                suggestions=["如何在 .env 配置 DeepSeek？", "Agent 和 Skill 有什么区别？"],
+                engine="imported",
+                mode="agent",
+                graph=result.get("graph", {}),
+                warnings=["Prompt Skill 需要真实 LLM；当前 mock 模式无法执行 Skill 指令"],
+                meta={
+                    "answer_mode": "skill_requires_llm",
+                    "confidence": 1,
+                    "kb_id": kb.info.id,
+                    "kb_name": kb.info.name,
+                    "agent_id": agent.id,
+                    "agent_name": agent.name,
+                    "agent_kind": agent.kind,
+                    "requires_model": True,
+                    "execution": self._execution_meta(execution),
+                },
             )
 
         # A Skill is often an instruction pack without a single runnable
