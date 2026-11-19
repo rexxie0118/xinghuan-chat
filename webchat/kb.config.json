@@ -1,0 +1,33 @@
+{
+  "provider": {
+    "kind": "mock"
+  },
+  "chunking": {
+    "target_chars": 620,
+    "max_chars": 1100,
+    "overlap_chars": 100
+  },
+  "extraction": {
+    "enabled": true,
+    "min_confidence": 0.4,
+    "link_mentions": true
+  },
+  "retrieval": {
+    "top_k": 6,
+    "vector_k": 40,
+    "fts_k": 40,
+    "graph_hops": 2,
+    "graph_k": 20,
+    "memory_k": 0,
+    "rrf_k": 60,
+    "min_graph_weight": 0.35,
+    "use_rerank": false
+  },
+  "answer": {
+    "max_context_chars": 6000,
+    "min_score": 0.005,
+    "language": "zh",
+    "extractive_floor_ratio": 0.85,
+    "abstain_on_unknown_terms": false
+  }
+}

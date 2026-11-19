@@ -1,0 +1,61 @@
+{
+  "departments": ["产品部", "研发部", "人事部"],
+  "default_department": "产品部",
+  "knowledge_bases": [
+    {
+      "id": "product",
+      "name": "产品知识库",
+      "department": "产品部",
+      "description": "北极星项目、星环 Chat、产品决策与 Agent 接入",
+      "dir": "knowledge/product",
+      "color": "#8ca6ff",
+      "sample_questions": [
+        "北极星项目的负责人是谁？",
+        "星环 Chat 支持哪些能力？",
+        "为什么放弃自建 MQ？",
+        "外部 Agent 怎么接入？"
+      ]
+    },
+    {
+      "id": "engineering",
+      "name": "研发知识库",
+      "department": "研发部",
+      "description": "系统架构、发布回滚、值班告警与研发规范",
+      "dir": "knowledge/engineering",
+      "color": "#f4c47a",
+      "sample_questions": [
+        "统一登录服务依赖什么？",
+        "发布失败了怎么回滚？",
+        "收到 P1 告警怎么处理？",
+        "系统用到了哪些数据库？"
+      ]
+    },
+    {
+      "id": "hr",
+      "name": "人事知识库",
+      "department": "人事部",
+      "description": "假期考勤、入职试用期、报销差旅与远程办公",
+      "dir": "knowledge/hr",
+      "color": "#67e8d5",
+      "sample_questions": [
+        "年假有几天？",
+        "试用期多长？",
+        "报销流程是什么？",
+        "可以远程办公吗？"
+      ]
+    },
+    {
+      "id": "common",
+      "name": "公司公共知识库",
+      "department": "all",
+      "description": "公司介绍、信息安全规范与通用术语",
+      "dir": "knowledge/common",
+      "color": "#c4a7ff",
+      "sample_questions": [
+        "公司主要做什么业务？",
+        "公司的信息安全要求是什么？",
+        "RAG 是什么？"
+      ]
+    }
+  ]
+}

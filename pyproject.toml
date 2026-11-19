@@ -1,0 +1,18 @@
+[project]
+name = "xinghuan-chat"
+version = "0.1.0"
+description = "Multi-department RAG + ontology chat workspace with importable Agent scripts"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "httpx>=0.27",
+  "numpy>=1.24",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["kb*", "webchat*"]
