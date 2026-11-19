@@ -2386,7 +2386,7 @@
     githubBox.className = "github-import";
     githubBox.innerHTML = `
       <div class="github-import-title">从 GitHub 导入 Skill / Agent</div>
-      <div class="github-import-help">粘贴仓库或目录地址，自动读取 SKILL.md / AGENT.md 和文本脚本。私有仓库需要服务端配置 GITHUB_TOKEN。</div>
+      <div class="github-import-help">粘贴仓库或目录地址，自动读取 SKILL.md / AGENT.md 和文本文件（最多 250 个 / 5MB）。私有仓库需要服务端配置 GITHUB_TOKEN。</div>
       <div class="github-row">
         <input type="text" id="github-url" placeholder="https://github.com/anthropics/skills/tree/main/skills/pdf">
         <button type="button" id="github-import-btn">导入</button>
@@ -2476,7 +2476,7 @@
     const mdPicker = agentFilePicker("Agent Markdown", ".md,.markdown,.txt", false);
     const scriptPicker = agentFilePicker(
       "参考脚本",
-      ".py,.sh,.js,.mjs,.ts,.txt,.json",
+      ".py,.sh,.js,.mjs,.ts,.txt,.json,.md,.html,.css,.svg,.xml,.yaml,.yml,.toml,.csv",
       true
     );
     let mdFile = null;
@@ -2486,7 +2486,7 @@
       showFileChips(mdPicker.chips, mdFile ? [mdFile] : []);
     });
     scriptPicker.input.addEventListener("change", () => {
-      scriptFiles = Array.from(scriptPicker.input.files || []).slice(0, 20);
+      scriptFiles = Array.from(scriptPicker.input.files || []).slice(0, 250);
       showFileChips(scriptPicker.chips, scriptFiles);
     });
 
@@ -2520,8 +2520,8 @@
         showError(error, "请选择 Agent Markdown 文件");
         return;
       }
-      if (scriptFiles.length > 20) {
-        showError(error, "最多导入 20 个脚本");
+      if (scriptFiles.length > 250) {
+        showError(error, "最多导入 250 个文件");
         return;
       }
       submit.disabled = true;
@@ -2531,7 +2531,7 @@
         const markdown = await mdFile.text();
         const files = [];
         for (const file of scriptFiles) {
-          if (file.size > 256_000) throw new Error(`${file.name} 超过 256KB`);
+          if (file.size > 512_000) throw new Error(`${file.name} 超过 512KB`);
           files.push({ name: file.name, content: await file.text() });
         }
         const data = await api("/api/agents", {

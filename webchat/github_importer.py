@@ -12,15 +12,17 @@ Supported URL shapes:
     https://raw.githubusercontent.com/owner/repo/main/skills/pdf/SKILL.md
 
 A folder should contain SKILL.md or AGENT.md (README.md is a fallback). The
-importer includes text files up to two directory levels deep, max 20 files and
-1MB total.
+importer includes text files up to four directory levels deep, max 250 files and
+5MB total.
 """
 
 from __future__ import annotations
 
 import base64
+import io
 import os
 import re
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,9 @@ from .agent_defs import (
 )
 
 API_BASE = os.getenv("GITHUB_API_BASE", "https://api.github.com").rstrip("/")
+ARCHIVE_BASE = "https://codeload.github.com"
+ARCHIVE_MAX_BYTES = 40 * 1024 * 1024
+ARCHIVE_MAX_UNCOMPRESSED = 80 * 1024 * 1024
 MANIFESTS = ("SKILL.md", "AGENT.md", "agent.md", "README.md")
 SKIP_DIRS = {".git", ".github", "__pycache__", "node_modules", "dist", "build", "venv", ".venv"}
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip", ".gz", ".tar", ".woff", ".woff2", ".ttf"}
@@ -188,6 +193,113 @@ def _decode_file(item: dict[str, Any]) -> str:
         raise GitHubImportError(f"{item.get('name')} 不是文本文件") from exc
 
 
+def _archive_bytes(owner: str, repo: str, ref: str, token: str | None) -> bytes | None:
+    """Download a codeload zip; returns None when the ref/repo is not accessible."""
+    headers = {"User-Agent": "xinghuan-chat/0.1"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    for ref_kind in ("heads", "tags"):
+        url = f"{ARCHIVE_BASE}/{owner}/{repo}/zip/refs/{ref_kind}/{ref}"
+        try:
+            with httpx.stream(
+                "GET", url, headers=headers, timeout=60, follow_redirects=True
+            ) as resp:
+                if resp.status_code == 404:
+                    continue
+                if resp.status_code >= 400:
+                    raise GitHubImportError(f"GitHub 归档下载 HTTP {resp.status_code}")
+                data = bytearray()
+                for chunk in resp.iter_bytes():
+                    data.extend(chunk)
+                    if len(data) > ARCHIVE_MAX_BYTES:
+                        raise GitHubImportError("GitHub 仓库归档超过 40MB，已拒绝导入")
+                return bytes(data)
+        except httpx.HTTPError as exc:
+            raise GitHubImportError(f"GitHub 归档下载失败：{type(exc).__name__}") from exc
+    return None
+
+
+def _try_archive(
+    repo: _RepoRef,
+    *,
+    ref: str,
+    entrypoint: str | None,
+    token: str | None,
+) -> GitHubImportResult | None:
+    data = _archive_bytes(repo.owner, repo.repo, ref, token)
+    if data is None:
+        return None
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise GitHubImportError("GitHub 归档不是合法 zip") from exc
+    names = zf.namelist()
+    if not names:
+        raise GitHubImportError("GitHub 归档为空")
+    root = names[0].split("/", 1)[0]
+    prefix = f"{root}/"
+    base_prefix = f"{prefix}{repo.path.strip('/')}/" if repo.path else prefix
+    manifest_name = repo.manifest
+    if not manifest_name:
+        candidates = []
+        for info in zf.infolist():
+            if not info.filename.startswith(base_prefix):
+                continue
+            rel = info.filename[len(base_prefix) :]
+            if rel in MANIFESTS:
+                candidates.append(rel)
+        for candidate in MANIFESTS:
+            if candidate in candidates:
+                manifest_name = candidate
+                break
+    if not manifest_name:
+        raise GitHubImportError("压缩包目录中没有 SKILL.md / AGENT.md / README.md")
+    manifest_path = f"{base_prefix}{manifest_name}"
+    try:
+        markdown = zf.read(manifest_path).decode("utf-8")
+    except (KeyError, UnicodeDecodeError) as exc:
+        raise GitHubImportError(f"无法读取 {manifest_name}") from exc
+    kind = "skill" if manifest_name.lower() == "skill.md" else "agent"
+
+    files: list[dict[str, str]] = []
+    total = 0
+    for info in zf.infolist():
+        if info.is_dir() or not info.filename.startswith(base_prefix):
+            continue
+        rel = info.filename[len(base_prefix) :]
+        if not rel or rel == manifest_name:
+            continue
+        parts = Path(rel).parts
+        if not parts or len(parts) > 4 or ".." in parts:
+            continue
+        if Path(rel).suffix.lower() not in ALLOWED_EXTENSIONS:
+            continue
+        if info.file_size > MAX_FILE_BYTES:
+            continue
+        if len(files) >= MAX_FILES:
+            raise GitHubImportError(f"文件数超过 {MAX_FILES} 个")
+        try:
+            content = zf.read(info.filename).decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        total += len(content.encode("utf-8"))
+        if total > MAX_TOTAL_BYTES:
+            raise GitHubImportError("文件总大小超过 5MB")
+        files.append({"name": rel, "content": content})
+    canonical = f"https://github.com/{repo.owner}/{repo.repo}"
+    if repo.path:
+        canonical += f"/tree/{ref}/{repo.path}"
+    return GitHubImportResult(
+        markdown=markdown,
+        files=files,
+        kind=kind,
+        source_url=canonical,
+        source_ref=ref,
+        source_path=repo.path,
+        entrypoint=(entrypoint or "").strip(),
+    )
+
+
 def import_from_github(
     url: str,
     *,
@@ -197,7 +309,17 @@ def import_from_github(
     token: str | None = None,
 ) -> GitHubImportResult:
     repo = parse_github_url(url, ref=ref, path=path)
-    client = GitHubClient(token=token or os.getenv("GITHUB_TOKEN"))
+    token = token or os.getenv("GITHUB_TOKEN")
+    if repo.ref:
+        archived = _try_archive(repo, ref=repo.ref, entrypoint=entrypoint, token=token)
+        if archived is not None:
+            return archived
+    else:
+        for candidate in ("main", "master"):
+            archived = _try_archive(repo, ref=candidate, entrypoint=entrypoint, token=token)
+            if archived is not None:
+                return archived
+    client = GitHubClient(token=token)
     try:
         info = client.repo_info(repo.owner, repo.repo)
         repo_ref = repo.ref or str(info.get("default_branch") or "main")
@@ -252,7 +374,7 @@ def import_from_github(
             content = _fetch_content(client, repo.owner, repo.repo, repo_ref, item)
             total += len(content.encode("utf-8"))
             if total > MAX_TOTAL_BYTES:
-                raise GitHubImportError("文件总大小超过 1MB")
+                raise GitHubImportError("文件总大小超过 5MB")
             files.append({"name": rel, "content": content})
 
         for item in listing if isinstance(listing, list) else []:
@@ -291,7 +413,7 @@ def _walk_dir(
     *,
     depth: int,
 ) -> None:
-    if depth > 2:
+    if depth > 4:
         return
     rel_dir = f"{base}/{directory}".strip("/")
     listing = client.contents(owner, repo, rel_dir, ref)

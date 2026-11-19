@@ -10,8 +10,9 @@ frontmatter block:
     timeout: 10
     ---
 
-If there is no frontmatter, the first heading is the name and the first script
-becomes the entrypoint. Scripts receive the user question as argv[1] and a JSON
+If there is no frontmatter, the first heading is the name. For an Agent the
+first executable file becomes the entrypoint; a Skill only gets one from
+frontmatter or an explicit override. Scripts receive the user question as argv[1] and a JSON
 payload on stdin (question, agent markdown, RAG context).
 
 This is deliberately a *demo* executor, not a hard sandbox. It runs in a temp
@@ -29,13 +30,14 @@ from typing import Any
 
 from .util import dump_json, load_json, new_id, utcnow
 
-MAX_FILES = 20
-MAX_FILE_BYTES = 256_000
-MAX_TOTAL_BYTES = 1_000_000
+MAX_FILES = 250
+MAX_FILE_BYTES = 512_000
+MAX_TOTAL_BYTES = 5_000_000
 MAX_RUNTIME_SECONDS = 15.0
 ALLOWED_EXTENSIONS = {
     ".py", ".sh", ".js", ".mjs", ".ts", ".txt", ".json",
-    ".md", ".yaml", ".yml", ".toml", ".csv",
+    ".md", ".html", ".css", ".svg", ".xml", ".yaml", ".yml",
+    ".toml", ".csv",
 }
 RUNTIME_BY_EXT = {".py": "python", ".sh": "bash", ".js": "node", ".mjs": "node"}
 EXECUTABLE_EXTENSIONS = set(RUNTIME_BY_EXT)
@@ -179,10 +181,10 @@ def build_agent(
             raise ValueError(f"{filename} 包含二进制内容")
         size = len(content.encode("utf-8"))
         if size > MAX_FILE_BYTES:
-            raise ValueError(f"{filename} 超过 256KB")
+            raise ValueError(f"{filename} 超过 512KB")
         total += size
         if total > MAX_TOTAL_BYTES:
-            raise ValueError("脚本总大小不能超过 1MB")
+            raise ValueError("脚本总大小不能超过 5MB")
         cleaned.append({"name": filename, "content": content})
 
     meta, body = _frontmatter(markdown)

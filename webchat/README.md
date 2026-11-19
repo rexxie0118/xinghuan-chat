@@ -152,8 +152,8 @@ https://raw.githubusercontent.com/owner/repo/main/skills/pdf/SKILL.md
 
 - 目录下优先找 `SKILL.md`，其次 `AGENT.md` / `agent.md`，最后 `README.md`；
 - `SKILL.md` → `kind=skill`，`AGENT.md` → `kind=agent`；
-- 最多 20 个文本文件、单文件 256KB、总大小 1MB，目录最多 2 层；
-- 只要文本类脚本/引用（`.py` / `.sh` / `.js` / `.mjs` / `.md` / `.txt` / `.json` / `.yaml` 等），跳过图片和二进制；
+- 最多 250 个文本文件、单文件 512KB、总大小 5MB，目录最多 4 层；
+- 只要文本类脚本/引用（`.py` / `.sh` / `.js` / `.mjs` / `.html` / `.css` / `.md` / `.json` / `.yaml` 等），跳过图片和二进制；
 - 私有仓库需要给 Web 服务配置 `GITHUB_TOKEN`；
 - 只接受 `github.com` / `raw.githubusercontent.com`，通过 GitHub API 拉取，不做任意 URL 代理。
 
@@ -213,7 +213,7 @@ timeout: 8
 - 临时工作目录，脚本文件只在该目录内材料化；
 - 环境变量清空，只保留 PATH / TMPDIR 等最小集合；
 - 单次 timeout 最大 15 秒，输出截断；
-- 最多 20 个文件、单文件 256KB、总大小 1MB；
+- 最多 250 个文件、单文件 512KB、总大小 5MB；
 - 子进程独立进程组，超时会 kill 整个进程组；
 - 脚本仍可能读取宿主文件或访问网络。**只导入你信任的脚本**，生产请放到容器 / 独立 job runner / gVisor 等强隔离环境。
 
