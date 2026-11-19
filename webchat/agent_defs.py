@@ -61,6 +61,12 @@ class ImportedAgent:
     source_ref: str = ""
     source_path: str = ""
 
+    @property
+    def pipeline(self) -> bool:
+        """Use the LLM to generate content before running the entrypoint."""
+        meta, _ = _frontmatter(self.markdown)
+        return str(meta.get("pipeline", "")).strip().lower() in {"1", "true", "yes", "on"}
+
     def public(self) -> dict[str, Any]:
         return {
             "id": self.id,
@@ -75,6 +81,7 @@ class ImportedAgent:
             "source_url": self.source_url,
             "source_ref": self.source_ref,
             "source_path": self.source_path,
+            "pipeline": self.pipeline,
         }
 
 

@@ -605,6 +605,7 @@
   }
 
   function agentKind(agent) {
+    if (agent?.pipeline) return "Pipeline";
     return agent?.kind === "skill" ? "Skill" : "Agent";
   }
 
@@ -1318,7 +1319,7 @@
     if (message.role === "assistant") {
       const meta = message.meta || {};
       if (meta.engine === "imported") {
-        head.append(badge(`导入 ${meta.agent_kind === "skill" ? "Skill" : "Agent"}`, "mint"));
+        head.append(badge(`导入 ${meta.pipeline ? "Pipeline" : meta.agent_kind === "skill" ? "Skill" : "Agent"}`, "mint"));
       }
       else if (meta.engine === "external") head.append(badge("外部 Agent", "accent"));
       else if (meta.mode === "agent") head.append(badge("Agent", "accent"));

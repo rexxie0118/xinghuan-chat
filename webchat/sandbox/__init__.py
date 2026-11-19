@@ -34,6 +34,7 @@ class RunRequest:
     agent_name: str
     agent_description: str
     agent_markdown: str
+    env: dict[str, str] = field(default_factory=dict)
     allow_exec: bool = True
 
 

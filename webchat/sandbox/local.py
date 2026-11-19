@@ -143,6 +143,7 @@ class LocalSubprocessRunner:
                 "PYTHONUNBUFFERED": "1",
                 "NODE_NO_WARNINGS": "1",
             }
+            env.update({str(k): str(v) for k, v in request.env.items()})
             proc = subprocess.Popen(
                 command,
                 cwd=str(input_dir),

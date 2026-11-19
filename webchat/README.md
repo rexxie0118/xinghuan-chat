@@ -188,6 +188,34 @@ GitHub Skill 通常没有单一入口脚本，所以导入后：
 
 例如把 `html-ppt` 的 `scripts/new-deck.sh` 配成 entrypoint，输入一个 deck 名称，就会执行脚手架并生成包含 skill 资源的 `workspace.zip`。Demo 里另建了 `html-ppt-builder` 演示这种用法。
 
+### Pipeline：Prompt Skill + 脚本产物
+
+![Pipeline 生成与下载](screenshots/pipeline.jpg)
+
+`html-ppt-auto` 把内容生成和文件生成串起来：
+
+```text
+Prompt Skill 读取 SKILL.md
+  → DeepSeek 生成完整 HTML
+  → 写入 _generated_content.html
+  → 执行 scripts/auto_deck.sh
+  → new-deck.sh 创建脚手架
+  → 用生成的 HTML 覆盖 index.html
+  → workspace.zip 作为可下载产物
+```
+
+启用方式是在 Markdown frontmatter 中声明：
+
+```yaml
+pipeline: true
+```
+
+并配置一个读取 `AGENT_CONTENT_FILE` 的 entrypoint。Pipeline Agent 的 trace 会显示：
+
+```text
+生成 PPT 内容 → 执行脚本 → 生成 PPT 文件
+```
+
 ### 本地上传
 
 在「Agent / Skill 管理」里也可以上传：
@@ -459,9 +487,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest webchat.tests.test_api -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取。
 
-> 当前共 13 项测试，全部通过。
+> 当前共 14 项测试，全部通过。
 
 ---
 

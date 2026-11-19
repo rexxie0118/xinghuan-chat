@@ -268,11 +268,98 @@ class AgentRunner:
                 kind="think",
             )
         )
+        pipeline = agent.pipeline
+        files = list(agent.files)
+        run_env: dict[str, str] = {}
+        generated_html = ""
+        if pipeline:
+            if kb.provider.is_mock:
+                trace.append(
+                    _step(
+                        "需要真实 LLM",
+                        "Pipeline Skill 需要先由模型生成内容，当前 mock provider 无法完成",
+                        kind="error",
+                        status="error",
+                    )
+                )
+                return AgentResult(
+                    answer=(
+                        f"### {agent.name} 已加载\n\n"
+                        "这是一个 **Pipeline Skill**：需要先用真实 LLM 生成内容，再执行脚手架脚本。\n\n"
+                        "当前知识库 provider 是 `mock`，请在 `webchat/.env` 配置 DeepSeek / ARK 后重试。"
+                    ),
+                    citations=[],
+                    trace=trace,
+                    suggestions=["如何配置 DeepSeek？"],
+                    engine="imported",
+                    mode="agent",
+                    graph=result.get("graph", {}),
+                    warnings=["Pipeline Skill 需要真实 LLM"],
+                    meta={
+                        "answer_mode": "skill_requires_llm",
+                        "confidence": 1,
+                        "kb_id": kb.info.id,
+                        "kb_name": kb.info.name,
+                        "agent_id": agent.id,
+                        "agent_name": agent.name,
+                        "agent_kind": agent.kind,
+                        "requires_model": True,
+                        "pipeline": True,
+                    },
+                )
+            try:
+                generated, _ = self._skill_answer(
+                    agent=agent,
+                    question=question,
+                    result=result,
+                    kb=kb,
+                    history=history,
+                    force_html=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("pipeline content generation failed: %s", exc)
+                generated = ""
+            if not generated.strip():
+                trace.append(_step("生成内容失败", "模型没有返回内容，未执行脚手架", kind="error", status="error"))
+                return AgentResult(
+                    answer=(
+                        f"### {agent.name} 内容生成失败\n\n"
+                        "模型没有返回内容，因此没有执行脚手架。请重试，或检查 DeepSeek 配置。"
+                    ),
+                    citations=[],
+                    trace=trace,
+                    suggestions=["重试一次", "检查 DeepSeek 配置"],
+                    engine="imported",
+                    mode="agent",
+                    graph=result.get("graph", {}),
+                    warnings=["Pipeline 内容生成失败，未执行脚本"],
+                    meta={
+                        "answer_mode": "skill_pipeline_error",
+                        "confidence": 0,
+                        "kb_id": kb.info.id,
+                        "kb_name": kb.info.name,
+                        "agent_id": agent.id,
+                        "agent_name": agent.name,
+                        "agent_kind": agent.kind,
+                        "pipeline": True,
+                    },
+                )
+            else:
+                generated_html = self._html_from_text(generated)
+                files.append({"name": "_generated_content.html", "content": generated_html})
+                run_env["AGENT_CONTENT_FILE"] = "_generated_content.html"
+                trace.append(
+                    _step(
+                        "生成 PPT 内容",
+                        f"模型生成 {len(generated_html)} 字符 HTML，准备写入脚手架",
+                        kind="answer",
+                    )
+                )
         run_id = new_id("run")
         execution = self.sandbox.run(
             RunRequest(
                 run_id=run_id,
-                files=agent.files,
+                files=files,
                 entrypoint=agent.entrypoint,
                 runtime=agent.runtime,
                 timeout=agent.timeout,
@@ -285,6 +372,7 @@ class AgentRunner:
                 agent_name=agent.name,
                 agent_description=agent.description,
                 agent_markdown=agent.markdown,
+                env=run_env,
                 allow_exec=self.settings.allow_script_exec,
             )
         ).to_dict()
@@ -320,6 +408,41 @@ class AgentRunner:
                 warnings.append(f"脚本以 exit={exit_code} 退出，已回退到知识库回答")
             elif stdout:
                 used_script = True
+                if pipeline:
+                    trace.append(
+                        _step(
+                            "生成 PPT 文件",
+                            f"脚手架执行完成 · {len(execution.get('artifacts') or [])} 个产物",
+                            kind="answer",
+                        )
+                    )
+                    return AgentResult(
+                        answer=(
+                            f"已根据 **{agent.name}** 的 Skill 指令生成内容，并执行 "
+                            f"`{agent.entrypoint}` 写入脚手架。\n\n"
+                            "生成的文件在下方「生成文件」中，下载 `workspace.zip` 后解压，打开 "
+                            "`examples/<名称>/index.html` 即可查看。"
+                        ),
+                        citations=[],
+                        trace=trace,
+                        suggestions=kb.suggestions(question, result),
+                        engine="imported",
+                        mode="agent",
+                        graph=result.get("graph", {}),
+                        warnings=warnings,
+                        meta={
+                            "answer_mode": "skill_pipeline",
+                            "confidence": 0.8,
+                            "timings": result.get("stats", {}).get("timings", {}),
+                            "kb_id": kb.info.id,
+                            "kb_name": kb.info.name,
+                            "agent_id": agent.id,
+                            "agent_name": agent.name,
+                            "agent_kind": agent.kind,
+                            "pipeline": True,
+                            "execution": self._execution_meta(execution),
+                        },
+                    )
                 indices = cited_indices(stdout, len(result.get("hits", [])))
                 citations = self._citations_from_indices(indices, result)
                 trace.append(
@@ -502,6 +625,25 @@ class AgentRunner:
         )
 
     @staticmethod
+    def _html_from_text(text: str) -> str:
+        import re
+        import html as html_lib
+
+        fenced = re.search(r"```(?:html)?\s*(.*?)```", text, re.S | re.I)
+        candidate = (fenced.group(1) if fenced else text).strip()
+        lower = candidate.lower()
+        start = lower.find("<!doctype")
+        if start < 0:
+            start = lower.find("<html")
+        if start >= 0:
+            return candidate[start:]
+        return (
+            "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
+            "<title>Generated Deck</title></head><body>"
+            f"<pre>{html_lib.escape(candidate)}</pre></body></html>"
+        )
+
+    @staticmethod
     def _skill_answer(
         *,
         agent: ImportedAgent,
@@ -509,6 +651,7 @@ class AgentRunner:
         result: dict[str, Any],
         kb: KnowledgeService,
         history: list[dict[str, str]],
+        force_html: bool = False,
     ) -> tuple[str, list[dict[str, Any]]]:
         hits = result.get("hits", [])[:6]
         if not hits:
@@ -529,6 +672,12 @@ class AgentRunner:
             "只根据提供的知识库证据回答，不要编造事实。引用证据时使用 [编号]。\n\n"
             f"# Skill: {agent.name}\n{agent.markdown}"
         )
+        if force_html:
+            system += (
+                "\n\n本次任务必须产出可运行的完整 HTML 文档："
+                "从 <!DOCTYPE html> 开始，包含 <html>、<head>、<body>、内联 CSS；"
+                "不要输出 Markdown 代码围栏，不要输出解释或前后缀。"
+            )
         history_text = ""
         for message in history[-8:]:
             role = "用户" if message.get("role") == "user" else "助手"
@@ -539,9 +688,11 @@ class AgentRunner:
             f"用户问题：{question}\n\n"
             + (f"对话历史：\n{history_text}\n" if history_text else "")
             + "知识库证据：\n" + "\n\n".join(evidence) + "\n\n"
-            "请用中文简洁回答，并在句末标注引用编号。"
+            + ("请直接输出完整 HTML 文档，不要使用 Markdown 围栏。" if force_html else "请用中文简洁回答，并在句末标注引用编号。")
         )
-        text = kb.provider.chat.complete(system, user, max_tokens=1000)
+        text = kb.provider.chat.complete(
+            system, user, max_tokens=3000 if force_html else 1000
+        )
         text = (text or "").strip()
         if not text:
             return "", []

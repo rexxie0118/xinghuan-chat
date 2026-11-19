@@ -358,6 +358,28 @@ print("artifact written")
             client.delete(f"/api/agents/{agent['id']}")
             client.delete(f"/api/conversations/{conv['id']}")
 
+    def test_pipeline_flag_and_html_extraction(self):
+        from webchat.agent import AgentRunner
+
+        self.assertTrue(
+            AgentRunner._html_from_text("```html\n<!DOCTYPE html><html><body>x</body></html>\n```").startswith("<!DOCTYPE html>")
+        )
+        self.assertIn("<html", AgentRunner._html_from_text("<!DOCTYPE html><html><body>x</body></html>"))
+        with TestClient(self.app) as client:
+            self.login(client)
+            created = client.post(
+                "/api/agents",
+                json={
+                    "kind": "skill",
+                    "markdown": "---\nname: Pipeline Demo\npipeline: true\n---\n# Pipeline Demo\n",
+                    "files": [{"name": "scripts/run.sh", "content": "echo ok\n"}],
+                    "entrypoint": "scripts/run.sh",
+                },
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            self.assertTrue(created.json()["agent"]["pipeline"])
+            client.delete(f"/api/agents/{created.json()['agent']['id']}")
+
     def test_multi_turn_history_is_in_prompt_and_followup_query(self):
         from kb.answer import build_prompt
         from kb.retrieval import ChunkHit, RetrievalResult
