@@ -1258,6 +1258,39 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
 .execution-artifact .icon { width: 11px; height: 11px; color: var(--accent); flex: none; }
 .execution-artifact span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .execution-artifact em { font-style: normal; color: var(--faint); font-family: var(--mono); font-size: 8px; }
+.agent-test-question { display: grid; gap: 4px; margin-top: 12px; }
+.agent-test-question span { font-size: 8.5px; color: var(--faint); }
+.agent-test-question input {
+  height: 34px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg-soft); color: var(--text); font-size: 10px; outline: none;
+}
+.agent-test-question input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.agent-test-result { margin-top: 12px; display: grid; gap: 9px; }
+.test-checks { display: grid; gap: 4px; }
+.test-check {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px;
+  color: var(--text-soft); font-size: 9.5px; background: var(--panel);
+}
+.test-check strong { min-width: 62px; font-weight: 550; }
+.test-check span:last-child { color: var(--faint); font-size: 8.5px; }
+.test-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex: none; }
+.test-check.ok .test-dot { background: var(--mint); box-shadow: 0 0 6px rgba(103,232,213,.6); }
+.test-check.fail .test-dot { background: var(--pink); }
+.test-check.fail { border-color: rgba(241,169,180,.2); }
+.test-answer {
+  max-height: 180px; overflow: auto; white-space: pre-wrap;
+  padding: 8px 9px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg-soft); color: var(--text-soft); font-size: 9.5px; line-height: 1.65;
+}
+.agent-test-result pre {
+  max-height: 160px; overflow: auto; margin: 0;
+  padding: 8px 9px; border: 1px solid var(--line); border-radius: 6px;
+  background: #0b1019; color: #cbd5e1; font-family: var(--mono); font-size: 8.5px;
+  white-space: pre-wrap; word-break: break-word;
+}
+.agent-test-result pre.stderr { color: #f1a9b4; }
+.test-artifacts { display: grid; gap: 4px; }
 .composer-mode {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 9.5px; color: var(--accent);

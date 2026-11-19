@@ -358,6 +358,54 @@ print("artifact written")
             client.delete(f"/api/agents/{agent['id']}")
             client.delete(f"/api/conversations/{conv['id']}")
 
+    def test_agent_preflight_checks_and_download(self):
+        script = """import os
+from pathlib import Path
+out = Path(os.environ["AGENT_OUTPUT_DIR"])
+(out / "preflight.txt").write_text("ok", encoding="utf-8")
+print("preflight-ok")
+"""
+        with TestClient(self.app) as client:
+            self.login(client)
+            created = client.post(
+                "/api/agents",
+                json={
+                    "kind": "agent",
+                    "markdown": "---\nname: Preflight Agent\n---\n# Preflight Agent\n",
+                    "files": [{"name": "run.py", "content": script}],
+                },
+            ).json()["agent"]
+            resp = client.post(
+                f"/api/agents/{created['id']}/test",
+                json={"question": "preflight"},
+            )
+            self.assertEqual(resp.status_code, 200, resp.text)
+            data = resp.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertEqual({c["id"] for c in data["checks"]}, {"entrypoint", "runtime", "run", "output", "artifacts"})
+            self.assertTrue(all(c["ok"] for c in data["checks"]))
+            self.assertEqual(data["artifacts"][0]["name"], "preflight.txt")
+            download = client.get(data["artifacts"][0]["url"])
+            self.assertEqual(download.status_code, 200)
+            self.assertEqual(download.text, "ok")
+
+            prompt = client.post(
+                "/api/agents",
+                json={
+                    "kind": "skill",
+                    "markdown": "---\nname: Prompt Only\n---\n# Prompt Only\n",
+                    "files": [],
+                },
+            ).json()["agent"]
+            prompt_test = client.post(
+                f"/api/agents/{prompt['id']}/test", json={"question": "test"}
+            )
+            self.assertEqual(prompt_test.status_code, 200)
+            self.assertEqual(prompt_test.json()["status"], "prompt")
+            self.assertFalse(prompt_test.json()["checks"][0]["ok"])
+            client.delete(f"/api/agents/{created['id']}")
+            client.delete(f"/api/agents/{prompt['id']}")
+
     def test_pipeline_flag_and_html_extraction(self):
         from webchat.agent import AgentRunner
 

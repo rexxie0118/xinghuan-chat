@@ -6,11 +6,13 @@ import asyncio
 import json
 import logging
 import re
+import shutil
 import sqlite3
+import sys
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Literal
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -90,6 +92,10 @@ class AgentIn(BaseModel):
     entrypoint: str | None = Field(default=None, max_length=200)
     markdown: str = Field(min_length=1)
     files: list[AgentFileIn] = Field(default_factory=list)
+
+
+class AgentTestIn(BaseModel):
+    question: str = Field(default="测试执行：请输出 OK", min_length=1, max_length=2000)
 
 
 class AgentConfigIn(BaseModel):
@@ -488,6 +494,178 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return {"agent": row_to_agent(row).public()}
         finally:
             db.close()
+
+    @app.post("/api/agents/{agent_id}/test")
+    def test_agent(
+        agent_id: str, payload: AgentTestIn, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        db = connect(settings.db_path)
+        try:
+            agent = get_agent(db, agent_id, user["id"])
+            if agent is None:
+                raise HTTPException(status_code=404, detail="Agent 不存在")
+        finally:
+            db.close()
+
+        checks: list[dict[str, Any]] = []
+        if not agent.entrypoint:
+            checks = [
+                {"id": "entrypoint", "label": "入口脚本", "ok": False, "detail": "未配置 entrypoint"},
+                {
+                    "id": "runtime",
+                    "label": "本地命令",
+                    "ok": False,
+                    "detail": "Prompt Skill 不执行本地命令，需要真实 LLM",
+                },
+                {"id": "run", "label": "执行", "ok": False, "detail": "未执行"},
+                {"id": "output", "label": "输出", "ok": False, "detail": "无 stdout"},
+                {"id": "artifacts", "label": "产物下载", "ok": False, "detail": "无产物"},
+            ]
+            return {
+                "status": "prompt",
+                "agent": agent.public(),
+                "checks": checks,
+                "answer": "这是一个 Prompt Skill，没有入口脚本；请在 Agent 模式中使用，或先配置 entrypoint。",
+                "trace": [],
+                "execution": None,
+                "artifacts": [],
+            }
+
+        command_ok = True
+        command_detail = ""
+        if agent.runtime == "python":
+            command_detail = sys.executable
+            command_ok = bool(sys.executable)
+        elif agent.runtime == "bash":
+            command_detail = "/bin/bash"
+            command_ok = Path("/bin/bash").exists()
+        else:
+            node = shutil.which("node")
+            command_detail = node or "node"
+            command_ok = bool(node)
+        checks.append(
+            {"id": "entrypoint", "label": "入口脚本", "ok": True, "detail": agent.entrypoint}
+        )
+        checks.append(
+            {"id": "runtime", "label": "本地命令", "ok": command_ok, "detail": command_detail}
+        )
+        if not settings.allow_script_exec:
+            checks += [
+                {"id": "run", "label": "执行", "ok": False, "detail": "服务端禁用了脚本执行"},
+                {"id": "output", "label": "输出", "ok": False, "detail": "未执行"},
+                {"id": "artifacts", "label": "产物下载", "ok": False, "detail": "无产物"},
+            ]
+            return {
+                "status": "disabled",
+                "agent": agent.public(),
+                "checks": checks,
+                "answer": "服务端已禁用脚本执行（WEBCHAT_ALLOW_SCRIPT_EXEC=0）。",
+                "trace": [],
+                "execution": None,
+                "artifacts": [],
+            }
+        if not command_ok:
+            checks += [
+                {"id": "run", "label": "执行", "ok": False, "detail": "runtime 不可用"},
+                {"id": "output", "label": "输出", "ok": False, "detail": "未执行"},
+                {"id": "artifacts", "label": "产物下载", "ok": False, "detail": "无产物"},
+            ]
+            return {
+                "status": "runtime_missing",
+                "agent": agent.public(),
+                "checks": checks,
+                "answer": "当前环境缺少该 runtime 命令，无法执行。",
+                "trace": [],
+                "execution": None,
+                "artifacts": [],
+            }
+
+        service = resolve_kb(user)
+        conversation = {"id": "test", "kb_id": service.info.id, "mode": "agent"}
+        try:
+            result = runner.run(
+                question=payload.question,
+                mode="agent",
+                user=user,
+                conversation=conversation,
+                history=[],
+                kb=service,
+                imported_agent=agent,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "status": "error",
+                "agent": agent.public(),
+                "checks": checks
+                + [
+                    {"id": "run", "label": "执行", "ok": False, "detail": type(exc).__name__},
+                    {"id": "output", "label": "输出", "ok": False, "detail": "异常"},
+                    {"id": "artifacts", "label": "产物下载", "ok": False, "detail": "无产物"},
+                ],
+                "answer": f"测试异常：{type(exc).__name__}: {exc}",
+                "trace": [],
+                "execution": None,
+                "artifacts": [],
+            }
+
+        execution = (result.meta or {}).get("execution") or {}
+        run_id = execution.get("run_id")
+        artifacts = execution.get("artifacts") or []
+        if run_id:
+            wdb = connect(settings.db_path)
+            try:
+                record_run(
+                    wdb,
+                    run_id=run_id,
+                    user_id=user["id"],
+                    agent_id=agent.id,
+                    agent_name=agent.name,
+                    execution=execution,
+                )
+            finally:
+                wdb.close()
+        for artifact in artifacts:
+            name = artifact.get("name", "")
+            artifact["url"] = (
+                f"/api/agent-runs/{run_id}/artifacts/"
+                + "/".join(quote(str(part)) for part in name.split("/"))
+            )
+        ran = bool(execution.get("ran"))
+        exit_code = execution.get("exit_code")
+        ok = ran and exit_code in (0, None)
+        checks.append(
+            {
+                "id": "run",
+                "label": "执行",
+                "ok": ok,
+                "detail": f"exit={exit_code}" if ran else execution.get("reason", "未执行"),
+            }
+        )
+        checks.append(
+            {
+                "id": "output",
+                "label": "输出",
+                "ok": bool((execution.get("stdout") or "").strip()),
+                "detail": f"{len(execution.get('stdout') or '')} 字符",
+            }
+        )
+        checks.append(
+            {
+                "id": "artifacts",
+                "label": "产物下载",
+                "ok": bool(artifacts),
+                "detail": f"{len(artifacts)} 个文件" if artifacts else "无产物",
+            }
+        )
+        return {
+            "status": "ok" if ok else "failed",
+            "agent": agent.public(),
+            "checks": checks,
+            "answer": result.answer,
+            "trace": result.trace,
+            "execution": execution,
+            "artifacts": artifacts,
+        }
 
     @app.get("/api/agents/{agent_id}")
     def get_agent_definition(

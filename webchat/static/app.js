@@ -2399,6 +2399,118 @@
     }
   }
 
+  function showAgentTest(agent, existingRoot = null) {
+    const root = existingRoot || modalShell();
+    root.hidden = false;
+    root.onclick = (event) => {
+      if (event.target === root) root.hidden = true;
+    };
+    const card = document.createElement("div");
+    card.className = "modal-card agent-modal";
+    card.innerHTML = `
+      <h3>测试「${escapeHtml(agent.name)}」</h3>
+      <p>检查入口脚本、本地命令、实际执行、stdout 和产物下载。测试会真正运行脚本，并保存产物。</p>
+    `;
+    const questionField = document.createElement("label");
+    questionField.className = "agent-test-question";
+    questionField.innerHTML = "<span>测试输入</span>";
+    const questionInput = document.createElement("input");
+    questionInput.type = "text";
+    questionInput.value = "测试执行：请输出 OK";
+    questionInput.maxLength = 500;
+    questionField.append(questionInput);
+    const actions = document.createElement("div");
+    actions.className = "agent-modal-actions";
+    actions.style.marginTop = "10px";
+    const done = document.createElement("button");
+    done.type = "button";
+    done.className = "btn ghost";
+    done.textContent = "完成";
+    done.addEventListener("click", () => (root.hidden = true));
+    const run = document.createElement("button");
+    run.type = "button";
+    run.className = "btn primary";
+    run.style.height = "36px";
+    run.style.fontSize = "11.5px";
+    run.textContent = "运行测试";
+    actions.append(done, run);
+    const result = document.createElement("div");
+    result.className = "agent-test-result";
+    result.hidden = true;
+    card.append(questionField, actions, result);
+    root.replaceChildren(card);
+    const showChecks = (data) => {
+      const checks = document.createElement("div");
+      checks.className = "test-checks";
+      for (const check of data.checks || []) {
+        const row = document.createElement("div");
+        row.className = "test-check " + (check.ok ? "ok" : "fail");
+        row.innerHTML = `<span class="test-dot"></span><strong></strong><span></span>`;
+        row.querySelector("strong").textContent = check.label;
+        row.querySelector("span:last-child").textContent = check.detail || "";
+        checks.append(row);
+      }
+      const answer = document.createElement("div");
+      answer.className = "test-answer";
+      answer.textContent = data.answer || "(无回答)";
+      result.append(checks, answer);
+      if (data.execution?.stdout) {
+        const pre = document.createElement("pre");
+        pre.textContent = data.execution.stdout;
+        result.append(pre);
+      }
+      if (data.execution?.stderr) {
+        const pre = document.createElement("pre");
+        pre.className = "stderr";
+        pre.textContent = data.execution.stderr;
+        result.append(pre);
+      }
+      if (Array.isArray(data.artifacts) && data.artifacts.length) {
+        const box = document.createElement("div");
+        box.className = "test-artifacts";
+        const label = document.createElement("div");
+        label.className = "execution-label";
+        label.textContent = "可下载产物";
+        box.append(label);
+        for (const artifact of data.artifacts) {
+          const link = document.createElement("a");
+          link.href = artifact.url || "#";
+          link.className = "execution-artifact";
+          link.innerHTML = `<svg class="icon"><use href="#i-book"/></svg><span></span><em></em>`;
+          link.querySelector("span").textContent = artifact.name || "artifact";
+          link.querySelector("em").textContent = formatBytes(artifact.size);
+          box.append(link);
+        }
+        result.append(box);
+      }
+      result.hidden = false;
+    };
+    run.addEventListener("click", async () => {
+      const question = questionInput.value.trim();
+      if (!question) {
+        toast("请填写测试输入", "error");
+        return;
+      }
+      run.disabled = true;
+      run.textContent = "测试中…";
+      result.hidden = true;
+      result.replaceChildren();
+      try {
+        const data = await api(`/api/agents/${encodeURIComponent(agent.id)}/test`, {
+          method: "POST",
+          body: { question },
+        });
+        showChecks(data);
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        run.disabled = false;
+        run.textContent = "运行测试";
+      }
+    });
+    questionInput.focus();
+  }
+
   function openAgentConfig(agent) {
     const root = modalShell();
     root.onclick = (event) => {
@@ -2558,8 +2670,8 @@
         });
         state.agents.unshift(data.agent);
         selectAgent(data.agent.id, { silent: true });
-        root.hidden = true;
         toast(`已从 GitHub 导入 ${agentKind(data.agent)}「${data.agent.name}」`, "success");
+        showAgentTest(data.agent, root);
       } catch (err) {
         showError(githubError, err.message);
       } finally {
@@ -2679,8 +2791,8 @@
         });
         state.agents.unshift(data.agent);
         selectAgent(data.agent.id, { silent: true });
-        root.hidden = true;
         toast(`已导入 ${agentKind(data.agent)}「${data.agent.name}」`, "success");
+        showAgentTest(data.agent, root);
       } catch (err) {
         showError(error, err.message);
       } finally {
@@ -2711,6 +2823,9 @@
           <span class="agent-menu-name"></span>
           <span class="agent-menu-desc"></span>
         </span>
+        <button type="button" class="icon-btn test-agent" title="测试" aria-label="测试">
+          <svg class="icon"><use href="#i-check"/></svg>
+        </button>
         <button type="button" class="icon-btn config-agent" title="执行配置" aria-label="执行配置">
           <svg class="icon"><use href="#i-edit"/></svg>
         </button>
@@ -2723,6 +2838,10 @@
         `${agentKind(agent)} · ${agent.files?.length || 0} 个文件 · `
         + (agent.entrypoint || (agent.kind === "skill" ? "Prompt Skill（需要模型）" : "无入口脚本"))
         + (agent.source_url ? ` · ${agent.source_url}` : "");
+      item.querySelector(".test-agent").addEventListener("click", () => {
+        root.hidden = true;
+        showAgentTest(agent);
+      });
       item.querySelector(".config-agent").addEventListener("click", () => {
         root.hidden = true;
         openAgentConfig(agent);
