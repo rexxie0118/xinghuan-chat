@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..artifacts import LocalArtifactStore
 from . import RunRequest, RunResult
 
 MAX_OUTPUT_CHARS = 20_000
@@ -46,6 +47,7 @@ class LocalSubprocessRunner:
 
     def __init__(self, settings: Any) -> None:
         self.settings = settings
+        self.artifacts = LocalArtifactStore(settings.data_dir)
 
     def run(self, request: RunRequest) -> RunResult:
         if not request.entrypoint:
@@ -84,6 +86,11 @@ class LocalSubprocessRunner:
                     raise ValueError(f"非法输入路径：{item['name']}")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(item["content"], encoding="utf-8")
+            initial_paths = {
+                p.relative_to(input_dir).as_posix()
+                for p in input_dir.rglob("*")
+                if p.is_file()
+            }
             entry = (input_dir / request.entrypoint).resolve()
             if not entry.is_relative_to(input_dir.resolve()):
                 raise ValueError("入口脚本路径越界")
@@ -166,7 +173,12 @@ class LocalSubprocessRunner:
                 stderr=_truncate(stderr or ""),
                 timed_out=timed_out,
                 duration_ms=duration,
-                artifacts=self._collect_artifacts(output_dir),
+                artifacts=self._persist_artifacts(
+                    run_id=request.run_id,
+                    input_dir=input_dir,
+                    output_dir=output_dir,
+                    initial_paths=initial_paths,
+                ),
                 runner=self.name,
                 run_id=request.run_id,
             )
@@ -180,6 +192,24 @@ class LocalSubprocessRunner:
             )
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+    def _persist_artifacts(
+        self,
+        *,
+        run_id: str,
+        input_dir: Path,
+        output_dir: Path,
+        initial_paths: set[str],
+    ) -> list[dict[str, Any]]:
+        try:
+            return self.artifacts.persist(
+                run_id=run_id,
+                input_dir=input_dir,
+                output_dir=output_dir,
+                initial_paths=initial_paths,
+            )
+        except Exception:
+            return []
 
     @staticmethod
     def _collect_artifacts(output_dir: Path) -> list[dict[str, Any]]:

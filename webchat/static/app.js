@@ -1529,8 +1529,36 @@
       note.textContent = "脚本没有产生输出。";
       body.append(note);
     }
+    if (exec.run_id && Array.isArray(exec.artifacts) && exec.artifacts.length) {
+      const label = document.createElement("div");
+      label.className = "execution-label";
+      label.textContent = "生成文件";
+      body.append(label);
+      const list = document.createElement("div");
+      list.className = "execution-artifacts";
+      for (const artifact of exec.artifacts) {
+        const name = artifact.name || "artifact";
+        const link = document.createElement("a");
+        const path = name.split("/").map(encodeURIComponent).join("/");
+        link.href = `/api/agent-runs/${encodeURIComponent(exec.run_id)}/artifacts/${path}`;
+        link.className = "execution-artifact";
+        link.innerHTML = `<svg class="icon"><use href="#i-book"/></svg><span></span><em></em>`;
+        link.querySelector("span").textContent = name;
+        link.querySelector("em").textContent = formatBytes(artifact.size);
+        link.addEventListener("click", (event) => event.stopPropagation());
+        list.append(link);
+      }
+      body.append(list);
+    }
     details.append(summary, body);
     return details;
+  }
+
+  function formatBytes(bytes) {
+    const value = Number(bytes) || 0;
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / 1024 / 1024).toFixed(1)} MB`;
   }
 
   function setLiveStatus(el, title, detail) {
@@ -2370,6 +2398,107 @@
     }
   }
 
+  function openAgentConfig(agent) {
+    const root = modalShell();
+    root.onclick = (event) => {
+      if (event.target === root) root.hidden = true;
+    };
+    const card = document.createElement("div");
+    card.className = "modal-card agent-modal";
+    card.innerHTML = `
+      <h3>执行配置</h3>
+      <p>为「${escapeHtml(agent.name)}」指定入口脚本。配置后 Agent 模式会执行脚本，并把输出文件保存为可下载产物。</p>
+    `;
+    const form = document.createElement("form");
+    form.className = "agent-form";
+    const row = document.createElement("div");
+    row.className = "agent-form-row";
+    const entryField = document.createElement("label");
+    entryField.innerHTML = "<span>入口脚本</span>";
+    const entryInput = document.createElement("input");
+    entryInput.type = "text";
+    entryInput.placeholder = "如 scripts/run.py；留空则为 Prompt Skill";
+    entryInput.value = agent.entrypoint || "";
+    entryInput.maxLength = 200;
+    const suggestions = document.createElement("datalist");
+    suggestions.id = "agent-entrypoints";
+    for (const name of agent.files || []) {
+      if (/\.(py|sh|js|mjs)$/i.test(name)) {
+        const option = document.createElement("option");
+        option.value = name;
+        suggestions.append(option);
+      }
+    }
+    entryInput.setAttribute("list", "agent-entrypoints");
+    entryField.append(entryInput, suggestions);
+    const runtimeField = document.createElement("label");
+    runtimeField.innerHTML = "<span>Runtime</span>";
+    const runtimeSelect = document.createElement("select");
+    runtimeSelect.innerHTML = '<option value="python">python</option><option value="bash">bash</option><option value="node">node</option>';
+    runtimeSelect.value = agent.runtime || "python";
+    runtimeField.append(runtimeSelect);
+    row.append(entryField, runtimeField);
+    const timeoutField = document.createElement("label");
+    timeoutField.innerHTML = "<span>超时（秒，最大 15）</span>";
+    const timeoutInput = document.createElement("input");
+    timeoutInput.type = "number";
+    timeoutInput.min = "1";
+    timeoutInput.max = "15";
+    timeoutInput.step = "1";
+    timeoutInput.value = String(Math.round(agent.timeout || 10));
+    timeoutField.append(timeoutInput);
+    const error = document.createElement("div");
+    error.className = "agent-form-error";
+    error.hidden = true;
+    const note = document.createElement("div");
+    note.className = "agent-note";
+    note.textContent = "脚本在临时目录执行，stdout/stderr 会展示；写入 out/ 的文件或新生成的文件会保存为产物。";
+    const actions = document.createElement("div");
+    actions.className = "agent-modal-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn ghost";
+    cancel.textContent = "取消";
+    cancel.addEventListener("click", () => (root.hidden = true));
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "btn primary";
+    save.style.height = "36px";
+    save.style.fontSize = "11.5px";
+    save.textContent = "保存";
+    actions.append(cancel, save);
+    form.append(row, timeoutField, error, note, actions);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      error.hidden = true;
+      save.disabled = true;
+      save.textContent = "保存中…";
+      try {
+        const data = await api(`/api/agents/${encodeURIComponent(agent.id)}`, {
+          method: "PATCH",
+          body: {
+            entrypoint: entryInput.value.trim(),
+            runtime: runtimeSelect.value,
+            timeout: Number(timeoutInput.value) || 10,
+          },
+        });
+        state.agents = state.agents.map((a) => (a.id === agent.id ? data.agent : a));
+        if (state.agentId === agent.id) selectAgent(agent.id, { silent: true });
+        root.hidden = true;
+        openAgentManager();
+        toast("执行配置已保存", "success");
+      } catch (err) {
+        showError(error, err.message);
+      } finally {
+        save.disabled = false;
+        save.textContent = "保存";
+      }
+    });
+    card.append(form);
+    root.append(card);
+    entryInput.focus();
+  }
+
   function openAgentManager(options = {}) {
     closeAgentMenu();
     closeAgentNav();
@@ -2581,7 +2710,10 @@
           <span class="agent-menu-name"></span>
           <span class="agent-menu-desc"></span>
         </span>
-        <button type="button" class="icon-btn" title="删除" aria-label="删除">
+        <button type="button" class="icon-btn config-agent" title="执行配置" aria-label="执行配置">
+          <svg class="icon"><use href="#i-edit"/></svg>
+        </button>
+        <button type="button" class="icon-btn delete-agent" title="删除" aria-label="删除">
           <svg class="icon"><use href="#i-trash"/></svg>
         </button>
       `;
@@ -2590,7 +2722,11 @@
         `${agentKind(agent)} · ${agent.files?.length || 0} 个文件 · `
         + (agent.entrypoint || (agent.kind === "skill" ? "Prompt Skill（需要模型）" : "无入口脚本"))
         + (agent.source_url ? ` · ${agent.source_url}` : "");
-      item.querySelector("button").addEventListener("click", async () => {
+      item.querySelector(".config-agent").addEventListener("click", () => {
+        root.hidden = true;
+        openAgentConfig(agent);
+      });
+      item.querySelector(".delete-agent").addEventListener("click", async () => {
         const ok = await confirmDialog(
           "删除这个 Agent？",
           `「${agent.name}」的定义和参考脚本会被删除，已经产生的历史回答不受影响。`,

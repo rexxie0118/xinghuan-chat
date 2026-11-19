@@ -320,6 +320,44 @@ print(f"nested script ok: {sys.argv[1]} [1]")
             client.delete(f"/api/agents/{skill['id']}")
             client.delete(f"/api/agents/{agent['id']}")
 
+    def test_agent_artifacts_and_authenticated_download(self):
+        script = """import os
+from pathlib import Path
+out = Path(os.environ["AGENT_OUTPUT_DIR"])
+(out / "result.txt").write_text("artifact-ok", encoding="utf-8")
+print("artifact written")
+"""
+        with TestClient(self.app) as client:
+            self.login(client)
+            created = client.post(
+                "/api/agents",
+                json={
+                    "kind": "agent",
+                    "markdown": "---\nname: 产物 Agent\n---\n# 产物 Agent\n",
+                    "files": [{"name": "run.py", "content": script}],
+                },
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            agent = created.json()["agent"]
+            conv = client.post(
+                "/api/conversations", json={"mode": "agent", "kb": "product"}
+            ).json()["conversation"]
+            resp = client.post(
+                f"/api/conversations/{conv['id']}/messages",
+                json={"content": "生成文件", "mode": "agent", "agent_id": agent["id"]},
+            )
+            done = dict(parse_sse(resp.text))["done"]["message"]
+            execution = done["meta"]["execution"]
+            self.assertTrue(execution["ran"])
+            self.assertEqual([a["name"] for a in execution["artifacts"]], ["result.txt"])
+            download = client.get(
+                f"/api/agent-runs/{execution['run_id']}/artifacts/result.txt"
+            )
+            self.assertEqual(download.status_code, 200)
+            self.assertEqual(download.text, "artifact-ok")
+            client.delete(f"/api/agents/{agent['id']}")
+            client.delete(f"/api/conversations/{conv['id']}")
+
     def test_multi_turn_history_is_in_prompt_and_followup_query(self):
         from kb.answer import build_prompt
         from kb.retrieval import ChunkHit, RetrievalResult

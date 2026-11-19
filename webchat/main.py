@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import sqlite3
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Literal
 from urllib.parse import urlparse
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from . import repository as repo
 from .agent import AgentRunner
+from .artifacts import LocalArtifactStore, owns_run, record_run
 from .agent_defs import (
     agent_detail,
     build_agent,
@@ -88,6 +90,12 @@ class AgentIn(BaseModel):
     entrypoint: str | None = Field(default=None, max_length=200)
     markdown: str = Field(min_length=1)
     files: list[AgentFileIn] = Field(default_factory=list)
+
+
+class AgentConfigIn(BaseModel):
+    entrypoint: str | None = Field(default=None, max_length=200)
+    runtime: Literal["python", "bash", "node"] | None = None
+    timeout: float | None = Field(default=None, ge=1, le=15)
 
 
 class GitHubImportIn(BaseModel):
@@ -420,6 +428,67 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             db.close()
 
+    @app.get("/api/agent-runs/{run_id}/artifacts/{name:path}")
+    def download_agent_artifact(
+        run_id: str, name: str, user: dict[str, Any] = User
+    ) -> FileResponse:
+        db = connect(settings.db_path)
+        try:
+            if not owns_run(db, run_id, user["id"]):
+                raise HTTPException(status_code=404, detail="产物不存在")
+        finally:
+            db.close()
+        path = LocalArtifactStore(settings.data_dir).path_for(run_id, name)
+        if path is None:
+            raise HTTPException(status_code=404, detail="产物不存在")
+        return FileResponse(
+            path,
+            media_type="application/octet-stream",
+            filename=name.rsplit("/", 1)[-1],
+        )
+
+    @app.patch("/api/agents/{agent_id}")
+    def update_agent_config(
+        agent_id: str, payload: AgentConfigIn, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        from .agent_defs import RUNTIME_BY_EXT, _clean_relpath, row_to_agent
+
+        db = connect(settings.db_path)
+        try:
+            agent = get_agent(db, agent_id, user["id"])
+            if agent is None:
+                raise HTTPException(status_code=404, detail="Agent 不存在")
+            if payload.entrypoint is None:
+                entrypoint = agent.entrypoint
+            else:
+                raw = payload.entrypoint.strip().replace("\\", "/")
+                if not raw:
+                    entrypoint = ""
+                else:
+                    try:
+                        entrypoint = _clean_relpath(raw, executable=True)
+                    except ValueError as exc:
+                        raise HTTPException(status_code=400, detail=str(exc)) from exc
+                    if entrypoint not in {f["name"] for f in agent.files}:
+                        raise HTTPException(status_code=400, detail="入口脚本不在该 Agent 的文件中")
+            runtime = payload.runtime or (
+                RUNTIME_BY_EXT.get(Path(entrypoint).suffix.lower(), agent.runtime)
+                if entrypoint
+                else agent.runtime
+            )
+            if runtime not in {"python", "bash", "node"}:
+                raise HTTPException(status_code=400, detail="runtime 只能是 python / bash / node")
+            timeout = payload.timeout if payload.timeout is not None else agent.timeout
+            with db:
+                db.execute(
+                    "UPDATE agents SET entrypoint=?, runtime=?, timeout=? WHERE id=? AND user_id=?",
+                    (entrypoint, runtime, float(timeout), agent_id, user["id"]),
+                )
+            row = db.execute("SELECT * FROM agents WHERE id=?", (agent_id,)).fetchone()
+            return {"agent": row_to_agent(row).public()}
+        finally:
+            db.close()
+
     @app.get("/api/agents/{agent_id}")
     def get_agent_definition(
         agent_id: str, user: dict[str, Any] = User
@@ -605,6 +674,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
                     wdb = connect(settings.db_path)
                     try:
+                        meta = result.message_meta()
+                        execution = (meta or {}).get("execution") or {}
+                        if execution.get("run_id"):
+                            record_run(
+                                wdb,
+                                run_id=execution["run_id"],
+                                user_id=user["id"],
+                                agent_id=str(meta.get("agent_id") or ""),
+                                agent_name=str(meta.get("agent_name") or ""),
+                                execution=execution,
+                            )
                         message = repo.add_message(
                             wdb,
                             conversation_id=conversation_id,
@@ -612,7 +692,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             role="assistant",
                             content=result.answer,
                             citations=result.citations,
-                            meta=result.message_meta(),
+                            meta=meta,
                         )
                         fresh = repo.get_conversation(
                             wdb, conversation_id=conversation_id, user_id=user["id"]

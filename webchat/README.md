@@ -171,6 +171,23 @@ GitHub Skill 通常没有单一入口脚本，所以导入后：
 - mock 环境不会假装执行 Skill，而是明确提示「Prompt Skill 需要真实 LLM」，不再输出无关的 RAG 答案；
 - 想让 Skill 直接运行脚本，请给它配置 `entrypoint`，或按 Agent 类型导入。
 
+### 执行配置与产物下载
+
+在「Agent / Skill 管理」里点条目的编辑按钮，可以配置：
+
+- `entrypoint`：如 `scripts/run.py` / `scripts/new-deck.sh`
+- `runtime`：`python` / `bash` / `node`
+- `timeout`：1–15 秒
+
+脚本执行后：
+
+- `AGENT_OUTPUT_DIR` 里的文件会保存为产物；
+- 脚本在输入目录中新生成的文件（例如 `examples/<name>/`）会打成一个 `workspace.zip`；
+- 聊天消息的执行面板会显示「生成文件」下载链接；
+- 下载接口会校验该 run 属于当前登录用户。
+
+例如把 `html-ppt` 的 `scripts/new-deck.sh` 配成 entrypoint，输入一个 deck 名称，就会执行脚手架并生成包含 skill 资源的 `workspace.zip`。Demo 里另建了 `html-ppt-builder` 演示这种用法。
+
 ### 本地上传
 
 在「Agent / Skill 管理」里也可以上传：
@@ -234,6 +251,8 @@ timeout: 8
 | `POST /api/agents` | 导入 Markdown + files |
 | `POST /api/agents/import/github` | 从 GitHub 仓库/目录自动导入 |
 | `GET /api/agents/{id}` | 完整定义与脚本内容 |
+| `PATCH /api/agents/{id}` | 配置 entrypoint / runtime / timeout |
+| `GET /api/agent-runs/{run_id}/artifacts/{name}` | 下载本次运行的产物 |
 | `DELETE /api/agents/{id}` | 删除自己的 Agent / Skill |
 
 选中导入 Agent 后，发送消息会在请求体带 `agent_id`；服务端校验归属后执行。导入 Agent 优先于外部 Agent 服务。
@@ -440,9 +459,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest webchat.tests.test_api -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 用户隔离。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离。
 
-> 当前共 12 项测试，全部通过。
+> 当前共 13 项测试，全部通过。
 
 ---
 
@@ -458,6 +477,7 @@ webchat/
 ├── agent.py                本地 / 外部 / 导入 Agent 编排
 ├── agent_defs.py           Agent / Skill 导入、解析、存储
 ├── github_importer.py      GitHub 仓库/目录导入（API + URL 校验）
+├── artifacts.py            运行产物持久化、下载、run 归属校验
 ├── sandbox/                SandboxRunner 协议 + local 实现（可扩展 Docker/K8s）
 ├── kbs.json                部门、知识库、示例问题配置
 ├── knowledge/              17 篇演示语料

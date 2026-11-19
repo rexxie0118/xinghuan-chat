@@ -1248,6 +1248,16 @@ html[data-theme="light"] .theme-icon-moon { display: none; }
 html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
 .execution pre.stderr { color: #f1a9b4; }
 .execution-empty { font-size: 9px; color: var(--faint); }
+.execution-artifacts { display: grid; gap: 4px; margin-top: 3px; }
+.execution-artifact {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 7px; border: 1px solid var(--line); border-radius: 5px;
+  color: var(--text-soft); font-size: 9px; background: var(--panel);
+}
+.execution-artifact:hover { border-color: var(--accent); color: var(--text); }
+.execution-artifact .icon { width: 11px; height: 11px; color: var(--accent); flex: none; }
+.execution-artifact span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.execution-artifact em { font-style: normal; color: var(--faint); font-family: var(--mono); font-size: 8px; }
 .composer-mode {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 9.5px; color: var(--accent);

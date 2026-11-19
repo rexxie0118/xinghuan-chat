@@ -69,6 +69,17 @@ SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_agents_user ON agents(user_id, created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS agent_runs (
+        id             TEXT PRIMARY KEY,
+        user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        agent_id       TEXT NOT NULL DEFAULT '',
+        agent_name     TEXT NOT NULL DEFAULT '',
+        created_at     TEXT NOT NULL,
+        execution_json TEXT NOT NULL DEFAULT '{}'
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_agent_runs_user ON agent_runs(user_id, created_at DESC)",
 ]
 
 
