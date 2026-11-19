@@ -262,6 +262,76 @@ print(f"脚本收到：{question}；上下文 {len(hits)} 条 [1]")
             self.assertEqual(client.delete(f"/api/agents/{agent['id']}").status_code, 200)
             self.assertEqual(client.get(f"/api/agents/{agent['id']}").status_code, 404)
 
+    def test_skill_import_and_nested_script_paths(self):
+        skill_md = """---
+name: 文档处理 Skill
+description: 只包含指令和参考脚本的 Skill
+---
+# 文档处理 Skill
+
+按步骤处理文档。
+"""
+        script = """import sys
+print(f"nested script ok: {sys.argv[1]} [1]")
+"""
+        with TestClient(self.app) as client:
+            self.login(client)
+            created = client.post(
+                "/api/agents",
+                json={
+                    "kind": "skill",
+                    "markdown": skill_md,
+                    "files": [{"name": "scripts/helper.py", "content": script}],
+                },
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            skill = created.json()["agent"]
+            self.assertEqual(skill["kind"], "skill")
+            self.assertEqual(skill["entrypoint"], "")
+            self.assertEqual(skill["files"], ["scripts/helper.py"])
+
+            # An Agent (not a Skill) auto-selects the first executable file,
+            # including a nested path; the runner must materialize the directory.
+            created = client.post(
+                "/api/agents",
+                json={
+                    "kind": "agent",
+                    "markdown": "---\nname: 嵌套脚本\n---\n# 嵌套脚本\n",
+                    "files": [{"name": "scripts/run.py", "content": script}],
+                },
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            agent = created.json()["agent"]
+            self.assertEqual(agent["kind"], "agent")
+            self.assertEqual(agent["entrypoint"], "scripts/run.py")
+
+            conv = client.post(
+                "/api/conversations", json={"mode": "agent", "kb": "product"}
+            ).json()["conversation"]
+            resp = client.post(
+                f"/api/conversations/{conv['id']}/messages",
+                json={"content": "处理文档", "mode": "agent", "agent_id": agent["id"]},
+            )
+            done = dict(parse_sse(resp.text))["done"]["message"]
+            self.assertIn("nested script ok", done["content"])
+            self.assertEqual(done["meta"]["execution"]["command"], "python scripts/run.py")
+            self.assertEqual(done["meta"]["agent_kind"], "agent")
+
+            client.delete(f"/api/agents/{skill['id']}")
+            client.delete(f"/api/agents/{agent['id']}")
+
+    def test_github_url_parser(self):
+        from webchat.github_importer import parse_github_url
+
+        repo = parse_github_url("https://github.com/anthropics/skills/tree/main/skills/pdf")
+        self.assertEqual((repo.owner, repo.repo, repo.ref, repo.path), ("anthropics", "skills", "main", "skills/pdf"))
+        blob = parse_github_url("https://github.com/o/r/blob/dev/a/SKILL.md")
+        self.assertEqual((blob.ref, blob.path, blob.manifest), ("dev", "a", "SKILL.md"))
+        raw = parse_github_url("https://raw.githubusercontent.com/o/r/main/a/AGENT.md")
+        self.assertEqual((raw.repo, raw.ref, raw.manifest), ("r", "main", "AGENT.md"))
+        with self.assertRaises(Exception):
+            parse_github_url("https://example.com/o/r")
+
     def test_kb_graph_and_entity(self):
         with TestClient(self.app) as client:
             self.login(client)

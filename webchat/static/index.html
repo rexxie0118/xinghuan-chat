@@ -201,6 +201,16 @@
         <kbd>⌘ K</kbd>
       </button>
 
+      <div class="agent-nav">
+        <button id="agent-nav-toggle" class="agent-nav-toggle" aria-expanded="false">
+          <span class="agent-nav-icon"><svg class="icon"><use href="#i-terminal"/></svg></span>
+          <span class="agent-nav-label">Agent / Skill</span>
+          <span id="agent-nav-count" class="count-pill">0</span>
+          <svg class="icon agent-nav-chevron"><use href="#i-chevron"/></svg>
+        </button>
+        <div id="agent-submenu" class="agent-submenu" hidden></div>
+      </div>
+
       <div class="sidebar-search">
         <svg class="icon"><use href="#i-search"/></svg>
         <input id="conversation-search" type="search" placeholder="搜索会话…" aria-label="搜索会话">

@@ -26,6 +26,7 @@ from .agent_defs import (
     list_agents,
     save_agent,
 )
+from .github_importer import GitHubImportError, import_from_github
 from .config import Settings
 from .db import connect, init_db
 from .knowledge import KnowledgeRegistry, KnowledgeService
@@ -83,8 +84,20 @@ class AgentFileIn(BaseModel):
 class AgentIn(BaseModel):
     name: str | None = Field(default=None, max_length=60)
     description: str | None = Field(default=None, max_length=200)
+    kind: Literal["agent", "skill"] = "agent"
+    entrypoint: str | None = Field(default=None, max_length=200)
     markdown: str = Field(min_length=1)
     files: list[AgentFileIn] = Field(default_factory=list)
+
+
+class GitHubImportIn(BaseModel):
+    url: str = Field(min_length=1, max_length=500)
+    ref: str | None = Field(default=None, max_length=120)
+    path: str | None = Field(default=None, max_length=300)
+    entrypoint: str | None = Field(default=None, max_length=200)
+    kind: Literal["agent", "skill"] | None = None
+    name: str | None = Field(default=None, max_length=60)
+    description: str | None = Field(default=None, max_length=200)
 
 
 class MessageIn(BaseModel):
@@ -362,6 +375,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 files=[{"name": f.name, "content": f.content} for f in payload.files],
                 name=payload.name,
                 description=payload.description,
+                kind=payload.kind,
+                entrypoint_override=payload.entrypoint,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        db = connect(settings.db_path)
+        try:
+            return {"agent": save_agent(db, record)}
+        finally:
+            db.close()
+
+    @app.post("/api/agents/import/github")
+    def import_agent_from_github(
+        payload: GitHubImportIn, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        try:
+            imported = import_from_github(
+                payload.url,
+                ref=payload.ref,
+                path=payload.path,
+                entrypoint=payload.entrypoint,
+            )
+        except GitHubImportError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        try:
+            record = build_agent(
+                user_id=user["id"],
+                markdown=imported.markdown,
+                files=imported.files,
+                name=payload.name or imported.name,
+                description=payload.description or imported.description,
+                kind=payload.kind or imported.kind,
+                source_url=imported.source_url,
+                source_ref=imported.source_ref,
+                source_path=imported.source_path,
+                entrypoint_override=payload.entrypoint or imported.entrypoint,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

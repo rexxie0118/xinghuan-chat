@@ -3,7 +3,8 @@
 一个可以直接跑起来的网页版 AI 对话应用：
 
 - **多部门知识库**：每个部门有自己的知识库，登录后可切换；会话按「用户 + 知识库」隔离。
-- **Chat / Agent 双模式**：在输入框内切换；Agent 模式可选择默认 Agent 或导入自己的 Agent。
+- **Chat / Agent 双模式**：在输入框内切换；Agent 模式可选择默认 Agent、导入 Agent 或导入 Skill。
+- **Agent / Skill 管理**：左侧菜单维护导入项，支持本地 Markdown + 脚本，也支持从 GitHub 仓库/目录自动导入。
 - **导入 Agent**：上传 Markdown 定义 + 参考脚本（Python / Bash / Node），在对话中触发执行，并展示 stdout / stderr / exit code / 轨迹。
 - **接入独立 Agent 服务**：也可以把另一个 repo 的 Agent 暴露成 HTTP 契约；失败自动回退本地 RAG。
 - **多用户**：注册 / 登录、HttpOnly Session、部门权限、会话与消息严格按 `user_id` 隔离。
@@ -52,11 +53,11 @@ cd xinghuan-chat
 
 ## 2. 界面
 
-| 按部门切换知识库 | Agent 脚本执行 |
+| 部门知识库切换 | Agent / Skill 管理 |
 | --- | --- |
-| ![知识库切换](screenshots/kb-menu.jpg) | ![Agent 脚本执行](screenshots/chat.jpg) |
+| ![知识库切换](screenshots/kb-menu.jpg) | ![Agent / Skill 菜单](screenshots/agent-skill-menu.jpg) |
 
-Agent 选择菜单见 [screenshots/agent-menu.jpg](screenshots/agent-menu.jpg)，导入弹窗见 [screenshots/agent-import.jpg](screenshots/agent-import.jpg)。登录页见 [screenshots/login.jpg](screenshots/login.jpg)，移动端见 [screenshots/mobile.jpg](screenshots/mobile.jpg)。
+GitHub 导入见 [screenshots/github-import.jpg](screenshots/github-import.jpg)，Agent 脚本执行见 [screenshots/chat.jpg](screenshots/chat.jpg)。登录页见 [screenshots/login.jpg](screenshots/login.jpg)，移动端见 [screenshots/mobile.jpg](screenshots/mobile.jpg)。
 
 - **左侧**：**知识库切换器**、新建对话、会话搜索、当前知识库的历史记录、重命名 / 删除。
 - **中间**：流式回答、Markdown、引用角标、脚本执行结果、可展开的执行轨迹、追问建议。
@@ -124,10 +125,50 @@ Agent 选择菜单见 [screenshots/agent-menu.jpg](screenshots/agent-menu.jpg)�
 
 > 执行层已经抽象成 `SandboxRunner`；后续换 Docker/K8s 不需要改 Agent 编排或前端，见 [架构扩展点](docs/architecture.md)。
 
-在输入框切到 `Agent`，点击「默认 Agent」选择器 →「导入 Agent」，上传：
+左侧菜单有 **Agent / Skill** 子菜单：
+
+- 点击任一条目：切到 Agent 模式并选用它；
+- 「管理」：查看、删除、上传；
+- 「GitHub 导入」：粘贴 GitHub 仓库/目录地址自动导入。
+
+![Agent / Skill 菜单](screenshots/agent-skill-menu.jpg)
+
+输入框右侧的 Agent 选择器也提供同样的列表。
+
+### 从 GitHub 自动导入
+
+![GitHub 导入](screenshots/github-import.jpg)
+
+支持以下地址：
+
+```text
+https://github.com/owner/repo
+https://github.com/owner/repo/tree/main/skills/pdf
+https://github.com/owner/repo/blob/main/skills/pdf/SKILL.md
+https://raw.githubusercontent.com/owner/repo/main/skills/pdf/SKILL.md
+```
+
+导入规则：
+
+- 目录下优先找 `SKILL.md`，其次 `AGENT.md` / `agent.md`，最后 `README.md`；
+- `SKILL.md` → `kind=skill`，`AGENT.md` → `kind=agent`；
+- 最多 20 个文本文件、单文件 256KB、总大小 1MB，目录最多 2 层；
+- 只要文本类脚本/引用（`.py` / `.sh` / `.js` / `.mjs` / `.md` / `.txt` / `.json` / `.yaml` 等），跳过图片和二进制；
+- 私有仓库需要给 Web 服务配置 `GITHUB_TOKEN`；
+- 只接受 `github.com` / `raw.githubusercontent.com`，通过 GitHub API 拉取，不做任意 URL 代理。
+
+GitHub Skill 通常没有单一入口脚本，所以导入后：
+
+- 有 `entrypoint`：Agent 模式执行脚本；
+- 没有 `entrypoint`：在有真实 LLM 的环境下，把 `SKILL.md` 作为 system instruction + 知识库证据作答；mock 环境回退 RAG。
+
+### 本地上传
+
+在「Agent / Skill 管理」里也可以上传：
 
 - 一个 **Agent Markdown**：描述目标、步骤和约束；
-- 一组 **参考脚本**：`.py` / `.sh` / `.js` / `.mjs`（也可带 `.txt` / `.json` 数据文件）。
+- 一组 **参考脚本**：`.py` / `.sh` / `.js` / `.mjs`（也可带 `.txt` / `.json` 数据文件）；
+- 类型可选 **Agent** 或 **Skill**；可选填入口脚本。
 
 Markdown 可以用 frontmatter 声明入口：
 
@@ -180,10 +221,11 @@ timeout: 8
 
 | 接口 | 作用 |
 | --- | --- |
-| `GET /api/agents` | 当前用户导入的 Agent |
+| `GET /api/agents` | 当前用户导入的 Agent / Skill |
 | `POST /api/agents` | 导入 Markdown + files |
+| `POST /api/agents/import/github` | 从 GitHub 仓库/目录自动导入 |
 | `GET /api/agents/{id}` | 完整定义与脚本内容 |
-| `DELETE /api/agents/{id}` | 删除自己的 Agent |
+| `DELETE /api/agents/{id}` | 删除自己的 Agent / Skill |
 
 选中导入 Agent 后，发送消息会在请求体带 `agent_id`；服务端校验归属后执行。导入 Agent 优先于外部 Agent 服务。
 
@@ -367,6 +409,7 @@ agents(id, user_id, name, description, markdown, entrypoint,
 | `WEBCHAT_KB_PROVIDER` | `mock` | 所有知识库共用：`mock` / `deepseek` / `ark` / `openai` / `openai-compatible` |
 | `WEBCHAT_ALLOW_SCRIPT_EXEC` | `true` | 是否允许执行导入 Agent 的参考脚本 |
 | `WEBCHAT_SANDBOX` | `local` | 执行后端；当前为 `local`，可注册 `docker` / `k8s` 实现 |
+| `GITHUB_TOKEN` | 空 | 导入私有 GitHub 仓库 / 提高 API 速率限制 |
 | `DEEPSEEK_API_KEY` | 空 | DeepSeek Key；配合 `WEBCHAT_KB_PROVIDER=deepseek` |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | DeepSeek 兼容网关地址 |
 | `DEEPSEEK_MODEL` | `deepseek-chat` | 可换 `deepseek-reasoner` |
@@ -388,9 +431,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest webchat.tests.test_api -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、知识图谱与实体详情、Agent 导入 / 脚本执行 / 用户隔离。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 用户隔离。
 
-> 当前共 9 项测试，全部通过。
+> 当前共 11 项测试，全部通过。
 
 ---
 
@@ -404,7 +447,8 @@ webchat/
 ├── security.py             scrypt、Session Token
 ├── knowledge.py            kb 引擎适配、多知识库注册表、检索/图谱/实体
 ├── agent.py                本地 / 外部 / 导入 Agent 编排
-├── agent_defs.py           Agent 导入、解析、存储
+├── agent_defs.py           Agent / Skill 导入、解析、存储
+├── github_importer.py      GitHub 仓库/目录导入（API + URL 校验）
 ├── sandbox/                SandboxRunner 协议 + local 实现（可扩展 Docker/K8s）
 ├── kbs.json                部门、知识库、示例问题配置
 ├── knowledge/              17 篇演示语料

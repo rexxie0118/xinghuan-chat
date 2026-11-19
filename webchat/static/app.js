@@ -601,6 +601,103 @@
     $("#agent-picker-label").textContent = agent ? agent.name : "默认 Agent";
     picker.classList.toggle("has-agent", Boolean(agent));
     renderAgentMenu();
+    renderAgentSubmenu();
+  }
+
+  function agentKind(agent) {
+    return agent?.kind === "skill" ? "Skill" : "Agent";
+  }
+
+  function renderAgentSubmenu() {
+    const menu = $("#agent-submenu");
+    if (!menu) return;
+    $("#agent-nav-count").textContent = String(state.agents.length);
+    menu.innerHTML = "";
+    const defaultItem = document.createElement("button");
+    defaultItem.type = "button";
+    defaultItem.className = "agent-submenu-item" + (!state.agentId ? " active" : "");
+    defaultItem.innerHTML = `
+      <span class="agent-menu-icon"><svg class="icon"><use href="#i-sparkle"/></svg></span>
+      <span class="agent-submenu-meta">
+        <span class="agent-submenu-name">默认 Agent</span>
+        <span class="agent-submenu-desc">内置 / 外部 Agent 服务</span>
+      </span>
+    `;
+    defaultItem.addEventListener("click", () => {
+      setMode("agent");
+      selectAgent(null);
+      closeAgentNav();
+      closeMobileSidebar();
+    });
+    menu.append(defaultItem);
+
+    for (const agent of state.agents) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "agent-submenu-item" + (agent.id === state.agentId ? " active" : "");
+      item.innerHTML = `
+        <span class="agent-menu-icon"><svg class="icon"><use href="#i-terminal"/></svg></span>
+        <span class="agent-submenu-meta">
+          <span class="agent-submenu-name"></span>
+          <span class="agent-submenu-desc"></span>
+        </span>
+        <span class="agent-submenu-kind ${agent.kind === "skill" ? "" : "agent"}">${agentKind(agent)}</span>
+      `;
+      item.querySelector(".agent-submenu-name").textContent = agent.name;
+      item.querySelector(".agent-submenu-desc").textContent =
+        `${agent.files?.length || 0} 个文件 · ${agent.entrypoint || "无入口脚本"}`;
+      item.addEventListener("click", () => {
+        setMode("agent");
+        selectAgent(agent.id);
+        closeAgentNav();
+        closeMobileSidebar();
+      });
+      menu.append(item);
+    }
+
+    if (!state.agents.length) {
+      const empty = document.createElement("div");
+      empty.className = "agent-submenu-empty";
+      empty.textContent = "还没有导入 Agent / Skill。可以从 GitHub 或本地文件导入。";
+      menu.append(empty);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "agent-submenu-actions";
+    const manage = document.createElement("button");
+    manage.type = "button";
+    manage.className = "agent-submenu-action";
+    manage.innerHTML = `<svg class="icon"><use href="#i-panel"/></svg><span>管理</span>`;
+    manage.addEventListener("click", () => {
+      closeAgentNav();
+      openAgentManager();
+    });
+    const github = document.createElement("button");
+    github.type = "button";
+    github.className = "agent-submenu-action";
+    github.innerHTML = `<svg class="icon"><use href="#i-arrow-right"/></svg><span>GitHub 导入</span>`;
+    github.addEventListener("click", () => {
+      closeAgentNav();
+      openAgentManager({ focusGithub: true });
+    });
+    actions.append(manage, github);
+    menu.append(actions);
+  }
+
+  function toggleAgentNav() {
+    const menu = $("#agent-submenu");
+    const toggle = $("#agent-nav-toggle");
+    const open = menu.hidden;
+    renderAgentSubmenu();
+    menu.hidden = !open;
+    toggle.classList.toggle("open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+  }
+
+  function closeAgentNav() {
+    $("#agent-submenu").hidden = true;
+    $("#agent-nav-toggle").classList.remove("open");
+    $("#agent-nav-toggle").setAttribute("aria-expanded", "false");
   }
 
   function renderAgentMenu() {
@@ -640,7 +737,8 @@
       `;
       item.querySelector(".agent-menu-name").textContent = agent.name;
       item.querySelector(".agent-menu-desc").textContent =
-        `${agent.files?.length || 0} 个脚本 · ${agent.entrypoint || "无入口脚本"}`;
+        `${agentKind(agent)} · ${agent.files?.length || 0} 个文件 · ${agent.entrypoint || "无入口脚本"}`
+        + (agent.source_url ? ` · ${agent.source_url}` : "");
       item.addEventListener("click", () => selectAgent(agent.id));
       menu.append(item);
     }
@@ -674,7 +772,7 @@
     closeAgentMenu();
     if (!opts.silent) {
       const agent = currentAgent();
-      toast(agent ? `已选择「${agent.name}」` : "已切换到默认 Agent");
+      toast(agent ? `已选择 ${agentKind(agent)}「${agent.name}」` : "已切换到默认 Agent");
     }
   }
 
@@ -1218,7 +1316,9 @@
 
     if (message.role === "assistant") {
       const meta = message.meta || {};
-      if (meta.engine === "imported") head.append(badge("导入 Agent", "mint"));
+      if (meta.engine === "imported") {
+        head.append(badge(`导入 ${meta.agent_kind === "skill" ? "Skill" : "Agent"}`, "mint"));
+      }
       else if (meta.engine === "external") head.append(badge("外部 Agent", "accent"));
       else if (meta.mode === "agent") head.append(badge("Agent", "accent"));
       else if (meta.mode === "rag") head.append(badge("Chat", ""));
@@ -2268,8 +2368,9 @@
     }
   }
 
-  function openAgentManager() {
+  function openAgentManager(options = {}) {
     closeAgentMenu();
+    closeAgentNav();
     const root = modalShell();
     root.onclick = (event) => {
       if (event.target === root) root.hidden = true;
@@ -2277,10 +2378,64 @@
     const card = document.createElement("div");
     card.className = "modal-card agent-modal";
     card.innerHTML = `
-      <h3>导入 Agent</h3>
-      <p>上传一个 Markdown 定义和参考脚本。Markdown 可用 frontmatter 指定
+      <h3>Agent / Skill 管理</h3>
+      <p>从 GitHub 自动导入，或上传 Markdown 定义和参考脚本。Markdown 可用 frontmatter 指定
         <code>entrypoint</code>、<code>runtime</code>、<code>timeout</code>。</p>
     `;
+    const githubBox = document.createElement("div");
+    githubBox.className = "github-import";
+    githubBox.innerHTML = `
+      <div class="github-import-title">从 GitHub 导入 Skill / Agent</div>
+      <div class="github-import-help">粘贴仓库或目录地址，自动读取 SKILL.md / AGENT.md 和文本脚本。私有仓库需要服务端配置 GITHUB_TOKEN。</div>
+      <div class="github-row">
+        <input type="text" id="github-url" placeholder="https://github.com/anthropics/skills/tree/main/skills/pdf">
+        <button type="button" id="github-import-btn">导入</button>
+      </div>
+      <div class="github-extra">
+        <input type="text" id="github-entrypoint" placeholder="入口脚本（可选），如 scripts/run.py">
+        <select id="github-kind">
+          <option value="">自动识别 Agent / Skill</option>
+          <option value="agent">Agent</option>
+          <option value="skill">Skill</option>
+        </select>
+      </div>
+      <div id="github-error" class="agent-form-error" hidden></div>
+    `;
+    const githubUrl = githubBox.querySelector("#github-url");
+    const githubEntry = githubBox.querySelector("#github-entrypoint");
+    const githubKind = githubBox.querySelector("#github-kind");
+    const githubBtn = githubBox.querySelector("#github-import-btn");
+    const githubError = githubBox.querySelector("#github-error");
+    githubBtn.addEventListener("click", async () => {
+      githubError.hidden = true;
+      const url = githubUrl.value.trim();
+      if (!url) {
+        showError(githubError, "请填写 GitHub 地址");
+        return;
+      }
+      githubBtn.disabled = true;
+      githubBtn.textContent = "导入中…";
+      try {
+        const data = await api("/api/agents/import/github", {
+          method: "POST",
+          body: {
+            url,
+            entrypoint: githubEntry.value.trim() || null,
+            kind: githubKind.value || null,
+          },
+        });
+        state.agents.unshift(data.agent);
+        selectAgent(data.agent.id, { silent: true });
+        root.hidden = true;
+        toast(`已从 GitHub 导入 ${agentKind(data.agent)}「${data.agent.name}」`, "success");
+      } catch (err) {
+        showError(githubError, err.message);
+      } finally {
+        githubBtn.disabled = false;
+        githubBtn.textContent = "导入";
+      }
+    });
+
     const form = document.createElement("form");
     form.className = "agent-form";
 
@@ -2301,6 +2456,22 @@
     descInput.maxLength = 200;
     descField.append(descInput);
     row.append(nameField, descField);
+
+    const row2 = document.createElement("div");
+    row2.className = "agent-form-row";
+    const kindField = document.createElement("label");
+    kindField.innerHTML = "<span>类型</span>";
+    const kindSelect = document.createElement("select");
+    kindSelect.innerHTML = '<option value="agent">Agent（可配置入口脚本）</option><option value="skill">Skill（指令 / 参考脚本）</option>';
+    kindField.append(kindSelect);
+    const entryField = document.createElement("label");
+    entryField.innerHTML = "<span>入口脚本（可选）</span>";
+    const entryInput = document.createElement("input");
+    entryInput.type = "text";
+    entryInput.placeholder = "如 scripts/run.py；Agent 默认取第一个脚本";
+    entryInput.maxLength = 200;
+    entryField.append(entryInput);
+    row2.append(kindField, entryField);
 
     const mdPicker = agentFilePicker("Agent Markdown", ".md,.markdown,.txt", false);
     const scriptPicker = agentFilePicker(
@@ -2341,7 +2512,7 @@
     submit.textContent = "导入并选择";
     actions.append(cancel, submit);
 
-    form.append(row, mdPicker.field, scriptPicker.field, error, note, actions);
+    form.append(row, row2, mdPicker.field, scriptPicker.field, error, note, actions);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       error.hidden = true;
@@ -2368,6 +2539,8 @@
           body: {
             name: nameInput.value.trim() || null,
             description: descInput.value.trim() || null,
+            kind: kindSelect.value,
+            entrypoint: entryInput.value.trim() || null,
             markdown,
             files,
           },
@@ -2375,7 +2548,7 @@
         state.agents.unshift(data.agent);
         selectAgent(data.agent.id, { silent: true });
         root.hidden = true;
-        toast(`已导入 Agent「${data.agent.name}」`, "success");
+        toast(`已导入 ${agentKind(data.agent)}「${data.agent.name}」`, "success");
       } catch (err) {
         showError(error, err.message);
       } finally {
@@ -2384,17 +2557,17 @@
       }
     });
 
-    card.append(form);
+    card.append(githubBox, form);
 
     const existing = document.createElement("div");
     existing.className = "agent-existing";
     const existingHead = document.createElement("h4");
-    existingHead.textContent = `已导入的 Agent · ${state.agents.length}`;
+    existingHead.textContent = `已导入的 Agent / Skill · ${state.agents.length}`;
     existing.append(existingHead);
     if (!state.agents.length) {
       const empty = document.createElement("p");
       empty.style.cssText = "font-size:10px;color:var(--faint);";
-      empty.textContent = "还没有导入 Agent。默认 Agent 会使用内置或外部 Agent 服务。";
+      empty.textContent = "还没有导入 Agent / Skill。默认 Agent 会使用内置或外部 Agent 服务。";
       existing.append(empty);
     }
     for (const agent of state.agents) {
@@ -2412,7 +2585,8 @@
       `;
       item.querySelector(".agent-menu-name").textContent = agent.name;
       item.querySelector(".agent-menu-desc").textContent =
-        `${agent.files?.length || 0} 个脚本 · ${agent.entrypoint || "无入口脚本"}`;
+        `${agentKind(agent)} · ${agent.files?.length || 0} 个文件 · ${agent.entrypoint || "无入口脚本"}`
+        + (agent.source_url ? ` · ${agent.source_url}` : "");
       item.querySelector("button").addEventListener("click", async () => {
         const ok = await confirmDialog(
           "删除这个 Agent？",
@@ -2437,7 +2611,8 @@
     }
     card.append(existing);
     root.append(card);
-    nameInput.focus();
+    if (options.focusGithub) githubUrl.focus();
+    else nameInput.focus();
   }
 
   /* --------------------------------------------------------------- events */
@@ -2496,6 +2671,10 @@
     $("#agent-picker").addEventListener("click", (event) => {
       event.stopPropagation();
       toggleAgentMenu();
+    });
+    $("#agent-nav-toggle").addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleAgentNav();
     });
     $("#title-edit").addEventListener("click", async () => {
       const conv = state.conversations.find((c) => c.id === state.activeId);
@@ -2564,6 +2743,7 @@
         closeMobileSidebar();
         closeKbMenu();
         closeAgentMenu();
+        closeAgentNav();
       }
     });
 

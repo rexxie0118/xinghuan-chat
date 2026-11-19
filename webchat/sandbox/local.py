@@ -51,7 +51,7 @@ class LocalSubprocessRunner:
         if not request.entrypoint:
             return RunResult(
                 ran=False,
-                reason="该 Agent 没有配置入口脚本",
+                reason="该 Agent/Skill 没有配置入口脚本",
                 runner=self.name,
                 run_id=request.run_id,
             )
@@ -79,8 +79,14 @@ class LocalSubprocessRunner:
         proc = None
         try:
             for item in request.files:
-                (input_dir / item["name"]).write_text(item["content"], encoding="utf-8")
-            entry = input_dir / request.entrypoint
+                target = (input_dir / item["name"]).resolve()
+                if not target.is_relative_to(input_dir.resolve()):
+                    raise ValueError(f"非法输入路径：{item['name']}")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(item["content"], encoding="utf-8")
+            entry = (input_dir / request.entrypoint).resolve()
+            if not entry.is_relative_to(input_dir.resolve()):
+                raise ValueError("入口脚本路径越界")
             if not entry.exists():
                 return RunResult(
                     ran=False,

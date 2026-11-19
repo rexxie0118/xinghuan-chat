@@ -257,9 +257,10 @@ class AgentRunner:
         kb: KnowledgeService,
     ) -> AgentResult:
         trace = list(base_trace)
+        kind_label = "Skill" if agent.kind == "skill" else "Agent"
         trace.append(
             _step(
-                "加载导入 Agent",
+                f"加载导入 {kind_label}",
                 f"{agent.name} · {len(agent.files)} 个参考脚本"
                 + (f" · 入口 {agent.entrypoint}" if agent.entrypoint else " · 未配置入口脚本"),
                 kind="think",
@@ -343,6 +344,7 @@ class AgentRunner:
                         "kb_name": kb.info.name,
                         "agent_id": agent.id,
                         "agent_name": agent.name,
+                        "agent_kind": agent.kind,
                         "execution": self._execution_meta(execution),
                     },
                 )
@@ -357,6 +359,47 @@ class AgentRunner:
                     kind="think",
                 )
             )
+
+        # A Skill is often an instruction pack without a single runnable
+        # entrypoint. If a real model is configured, use the Skill Markdown as
+        # the system instruction with the same retrieved evidence.
+        if not execution.get("ran") and agent.kind == "skill" and not kb.provider.is_mock:
+            try:
+                skill_answer, skill_citations = self._skill_answer(
+                    agent=agent, question=question, result=result, kb=kb
+                )
+                if skill_answer:
+                    trace.append(
+                        _step(
+                            "Skill 指令作答",
+                            f"使用 {agent.name} 的 Markdown 指令 + 知识库证据",
+                            kind="answer",
+                        )
+                    )
+                    return AgentResult(
+                        answer=skill_answer,
+                        citations=skill_citations,
+                        trace=trace,
+                        suggestions=kb.suggestions(question, result),
+                        engine="imported",
+                        mode="agent",
+                        graph=result.get("graph", {}),
+                        warnings=warnings,
+                        meta={
+                            "answer_mode": "skill_llm",
+                            "confidence": 0.55,
+                            "timings": result.get("stats", {}).get("timings", {}),
+                            "kb_id": kb.info.id,
+                            "kb_name": kb.info.name,
+                            "agent_id": agent.id,
+                            "agent_name": agent.name,
+                            "agent_kind": agent.kind,
+                            "execution": self._execution_meta(execution),
+                        },
+                    )
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("skill LLM answer failed: %s", exc)
+                warnings.append(f"Skill 指令作答失败，已回退知识库：{type(exc).__name__}")
 
         # Fallback: use the same grounded answer path as Chat mode.
         try:
@@ -397,10 +440,50 @@ class AgentRunner:
                 "kb_name": kb.info.name,
                 "agent_id": agent.id,
                 "agent_name": agent.name,
+                "agent_kind": agent.kind,
                 "execution": self._execution_meta(execution),
                 "used_script": used_script,
             },
         )
+
+    @staticmethod
+    def _skill_answer(
+        *,
+        agent: ImportedAgent,
+        question: str,
+        result: dict[str, Any],
+        kb: KnowledgeService,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        hits = result.get("hits", [])[:6]
+        if not hits:
+            return "", []
+        evidence = []
+        for index, hit in enumerate(hits, 1):
+            text = " ".join((hit.get("text") or "").split())[:900]
+            heading = (
+                " › " + str(hit.get("heading_path"))
+                if hit.get("heading_path")
+                else ""
+            )
+            evidence.append(
+                f"[{index}] 《{hit.get('doc_title', '')}》{heading}\n{text}"
+            )
+        system = (
+            "你正在执行一个可复用的 Skill。严格遵循下面的 Skill 指令；"
+            "只根据提供的知识库证据回答，不要编造事实。引用证据时使用 [编号]。\n\n"
+            f"# Skill: {agent.name}\n{agent.markdown}"
+        )
+        user = (
+            f"用户问题：{question}\n\n"
+            "知识库证据：\n" + "\n\n".join(evidence) + "\n\n"
+            "请用中文简洁回答，并在句末标注引用编号。"
+        )
+        text = kb.provider.chat.complete(system, user, max_tokens=1000)
+        text = (text or "").strip()
+        if not text:
+            return "", []
+        indices = cited_indices(text, len(hits))
+        return text, AgentRunner._citations_from_indices(indices, result)
 
     @staticmethod
     def _execution_meta(execution: dict[str, Any]) -> dict[str, Any]:

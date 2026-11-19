@@ -61,7 +61,11 @@ SCHEMA = [
         runtime     TEXT NOT NULL DEFAULT 'python',
         timeout     REAL NOT NULL DEFAULT 10,
         files_json  TEXT NOT NULL DEFAULT '[]',
-        created_at  TEXT NOT NULL
+        created_at  TEXT NOT NULL,
+        kind        TEXT NOT NULL DEFAULT 'agent',
+        source_url  TEXT NOT NULL DEFAULT '',
+        source_ref  TEXT NOT NULL DEFAULT '',
+        source_path TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_agents_user ON agents(user_id, created_at DESC)",
@@ -102,6 +106,16 @@ def init_db(path: Path | str) -> None:
                 conn,
                 "conversations",
                 {"kb_id": "TEXT NOT NULL DEFAULT 'product'"},
+            )
+            _ensure_columns(
+                conn,
+                "agents",
+                {
+                    "kind": "TEXT NOT NULL DEFAULT 'agent'",
+                    "source_url": "TEXT NOT NULL DEFAULT ''",
+                    "source_ref": "TEXT NOT NULL DEFAULT ''",
+                    "source_path": "TEXT NOT NULL DEFAULT ''",
+                },
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_conversations_user_kb"

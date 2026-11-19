@@ -33,7 +33,10 @@ MAX_FILES = 20
 MAX_FILE_BYTES = 256_000
 MAX_TOTAL_BYTES = 1_000_000
 MAX_RUNTIME_SECONDS = 15.0
-ALLOWED_EXTENSIONS = {".py", ".sh", ".js", ".mjs", ".ts", ".txt", ".json"}
+ALLOWED_EXTENSIONS = {
+    ".py", ".sh", ".js", ".mjs", ".ts", ".txt", ".json",
+    ".md", ".yaml", ".yml", ".toml", ".csv",
+}
 RUNTIME_BY_EXT = {".py": "python", ".sh": "bash", ".js": "node", ".mjs": "node"}
 EXECUTABLE_EXTENSIONS = set(RUNTIME_BY_EXT)
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.\-\u4e00-\u9fff]{1,120}$")
@@ -51,6 +54,10 @@ class ImportedAgent:
     timeout: float
     files: list[dict[str, str]]
     created_at: str
+    kind: str = "agent"
+    source_url: str = ""
+    source_ref: str = ""
+    source_path: str = ""
 
     def public(self) -> dict[str, Any]:
         return {
@@ -62,16 +69,34 @@ class ImportedAgent:
             "timeout": self.timeout,
             "files": [f["name"] for f in self.files],
             "created_at": self.created_at,
+            "kind": self.kind,
+            "source_url": self.source_url,
+            "source_ref": self.source_ref,
+            "source_path": self.source_path,
         }
 
 
-def _clean_filename(raw: str) -> str:
-    name = Path(str(raw or "")).name.strip()
-    if not name or name in {".", ".."} or not SAFE_NAME.match(name):
-        raise ValueError(f"非法文件名：{raw!r}")
+def _clean_relpath(raw: str, *, executable: bool = False) -> str:
+    """Allow safe relative paths such as ``scripts/run.py``.
+
+    No absolute paths, ``..`` escapes, leading dots, or nested depths over 4.
+    """
+    text = str(raw or "").replace("\\", "/").strip()
+    if not text or text.startswith("/"):
+        raise ValueError(f"非法文件路径：{raw!r}")
+    parts = [part for part in Path(text).parts if part not in ("", ".")]
+    if not parts or len(parts) > 4:
+        raise ValueError(f"文件路径层级过深：{raw!r}")
+    if any(part == ".." or not SAFE_NAME.match(part) for part in parts):
+        raise ValueError(f"非法文件路径：{raw!r}")
+    name = "/".join(parts)
+    if len(name) > 200:
+        raise ValueError("文件路径过长")
     suffix = Path(name).suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise ValueError(f"不支持的文件类型：{name}（允许 {', '.join(sorted(ALLOWED_EXTENSIONS))}）")
+    if executable and suffix not in EXECUTABLE_EXTENSIONS:
+        raise ValueError("entrypoint 必须是 .py / .sh / .js / .mjs 脚本")
     return name
 
 
@@ -125,12 +150,19 @@ def build_agent(
     files: list[dict[str, str]],
     name: str | None = None,
     description: str | None = None,
+    kind: str = "agent",
+    source_url: str = "",
+    source_ref: str = "",
+    source_path: str = "",
+    entrypoint_override: str | None = None,
 ) -> dict[str, Any]:
     markdown = (markdown or "").strip()
     if not markdown:
         raise ValueError("Agent Markdown 不能为空")
     if len(markdown.encode("utf-8")) > MAX_TOTAL_BYTES:
         raise ValueError("Agent Markdown 不能超过 1MB")
+    if kind not in {"agent", "skill"}:
+        raise ValueError("kind 必须是 agent 或 skill")
     if len(files) > MAX_FILES:
         raise ValueError(f"最多导入 {MAX_FILES} 个脚本")
 
@@ -138,7 +170,7 @@ def build_agent(
     seen: set[str] = set()
     total = 0
     for raw in files:
-        filename = _clean_filename(raw.get("name", ""))
+        filename = _clean_relpath(raw.get("name", ""))
         if filename in seen:
             raise ValueError(f"重复的文件名：{filename}")
         seen.add(filename)
@@ -159,12 +191,10 @@ def build_agent(
         raise ValueError("Agent 名称不能为空")
     agent_description = (description or meta.get("description") or _infer_description(body)).strip()[:200]
 
-    entrypoint = (meta.get("entrypoint") or "").strip()
+    entrypoint = (entrypoint_override or meta.get("entrypoint") or "").strip()
     if entrypoint:
-        entrypoint = _clean_filename(entrypoint)
-        if Path(entrypoint).suffix.lower() not in EXECUTABLE_EXTENSIONS:
-            raise ValueError("entrypoint 必须是 .py / .sh / .js / .mjs 脚本")
-    elif cleaned:
+        entrypoint = _clean_relpath(entrypoint, executable=True)
+    elif cleaned and kind == "agent":
         entrypoint = next(
             (
                 f["name"]
@@ -200,6 +230,10 @@ def build_agent(
         "timeout": timeout,
         "files_json": dump_json(cleaned),
         "created_at": utcnow().isoformat(timespec="microseconds"),
+        "kind": kind,
+        "source_url": source_url,
+        "source_ref": source_ref,
+        "source_path": source_path,
     }
 
 
@@ -215,6 +249,10 @@ def row_to_agent(row) -> ImportedAgent:
         timeout=float(row["timeout"]),
         files=load_json(row["files_json"], []),
         created_at=row["created_at"],
+        kind=row["kind"] if "kind" in row.keys() else "agent",
+        source_url=row["source_url"] if "source_url" in row.keys() else "",
+        source_ref=row["source_ref"] if "source_ref" in row.keys() else "",
+        source_path=row["source_path"] if "source_path" in row.keys() else "",
     )
 
 
@@ -226,7 +264,8 @@ def save_agent(conn, record: dict[str, Any]) -> dict[str, Any]:
     with conn:
         conn.execute(
             "INSERT INTO agents(id, user_id, name, description, markdown, entrypoint,"
-            " runtime, timeout, files_json, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            " runtime, timeout, files_json, created_at, kind, source_url, source_ref,"
+            " source_path) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 record["id"],
                 record["user_id"],
@@ -238,6 +277,10 @@ def save_agent(conn, record: dict[str, Any]) -> dict[str, Any]:
                 record["timeout"],
                 record["files_json"],
                 record["created_at"],
+                record.get("kind", "agent"),
+                record.get("source_url", ""),
+                record.get("source_ref", ""),
+                record.get("source_path", ""),
             ),
         )
     return row_to_agent(
