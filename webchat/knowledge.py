@@ -228,7 +228,13 @@ class KnowledgeService:
         graph = ontology.subgraph(seeds, hops=2, min_weight=0.35, max_nodes=40)
         return self._graph_payload(graph["nodes"], graph["edges"])
 
-    def answer(self, question: str, result: dict[str, Any]):
+    def answer(
+        self,
+        question: str,
+        result: dict[str, Any],
+        *,
+        history: list[dict[str, str]] | None = None,
+    ):
         """Build the grounded answer. ``result`` is already a JSON-safe dict."""
         conn = self._connection()
         try:
@@ -253,7 +259,7 @@ class KnowledgeService:
             rr.seeds = result.get("seeds", [])
             rr.warnings = result.get("warnings", [])
             rr.timings = result.get("stats", {}).get("timings", {})
-            return synthesize(question, rr, self.provider, self.cfg)
+            return synthesize(question, rr, self.provider, self.cfg, history=history)
         finally:
             conn.close()
 

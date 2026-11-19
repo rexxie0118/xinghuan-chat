@@ -169,6 +169,7 @@ class AgentRunner:
                 result=result,
                 base_trace=base_trace,
                 kb=kb,
+                history=history,
             )
 
         if self.settings.agent_enabled:
@@ -255,6 +256,7 @@ class AgentRunner:
         result: dict[str, Any],
         base_trace: list[dict[str, Any]],
         kb: KnowledgeService,
+        history: list[dict[str, str]],
     ) -> AgentResult:
         trace = list(base_trace)
         kind_label = "Skill" if agent.kind == "skill" else "Agent"
@@ -415,7 +417,11 @@ class AgentRunner:
         if not execution.get("ran") and agent.kind == "skill" and not kb.provider.is_mock:
             try:
                 skill_answer, skill_citations = self._skill_answer(
-                    agent=agent, question=question, result=result, kb=kb
+                    agent=agent,
+                    question=question,
+                    result=result,
+                    kb=kb,
+                    history=history,
                 )
                 if skill_answer:
                     trace.append(
@@ -452,7 +458,7 @@ class AgentRunner:
 
         # Fallback: use the same grounded answer path as Chat mode.
         try:
-            fallback = kb.answer(question, result)
+            fallback = kb.answer(question, result, history=history)
             answer_dict = fallback.to_dict()
             answer_dict["answer"] = _clean_extractive(answer_dict.get("answer", ""))
         except Exception as exc:  # noqa: BLE001
@@ -502,6 +508,7 @@ class AgentRunner:
         question: str,
         result: dict[str, Any],
         kb: KnowledgeService,
+        history: list[dict[str, str]],
     ) -> tuple[str, list[dict[str, Any]]]:
         hits = result.get("hits", [])[:6]
         if not hits:
@@ -522,9 +529,16 @@ class AgentRunner:
             "只根据提供的知识库证据回答，不要编造事实。引用证据时使用 [编号]。\n\n"
             f"# Skill: {agent.name}\n{agent.markdown}"
         )
+        history_text = ""
+        for message in history[-8:]:
+            role = "用户" if message.get("role") == "user" else "助手"
+            text = " ".join((message.get("content") or "").split())
+            if text:
+                history_text += f"{role}：{text[:700]}\n"
         user = (
             f"用户问题：{question}\n\n"
-            "知识库证据：\n" + "\n\n".join(evidence) + "\n\n"
+            + (f"对话历史：\n{history_text}\n" if history_text else "")
+            + "知识库证据：\n" + "\n\n".join(evidence) + "\n\n"
             "请用中文简洁回答，并在句末标注引用编号。"
         )
         text = kb.provider.chat.complete(system, user, max_tokens=1000)
@@ -728,9 +742,14 @@ class AgentRunner:
 
     @staticmethod
     def _retrieval_query(question: str, history: list[dict[str, str]]) -> str:
-        """Resolve short follow-ups like "那它呢？" with the previous user turn."""
+        """Resolve follow-ups and pronouns with the previous user turn."""
         q = question.strip()
-        if len(q) <= 12 and history:
+        followup_markers = (
+            "他", "她", "它", "这个", "那个", "上述", "他们", "这些", "该",
+            "还有", "那", "呢", "继续", "再", "上一个", "前面",
+        )
+        is_followup = len(q) <= 18 or any(marker in q for marker in followup_markers)
+        if is_followup and history:
             previous = [m for m in history if m["role"] == "user"]
             if previous:
                 return f"{previous[-1]['content']} {q}"[:500]

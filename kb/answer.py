@@ -128,9 +128,32 @@ def _memory_block(result: RetrievalResult) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(question: str, result: RetrievalResult) -> tuple[str, list[Citation]]:
+def _history_block(history: Sequence[dict[str, str]] | None) -> str:
+    if not history:
+        return ""
+    lines = []
+    for message in history[-8:]:
+        role = "用户" if message.get("role") == "user" else "助手"
+        text = " ".join((message.get("content") or "").split())
+        if text:
+            lines.append(f"{role}：{text[:700]}")
+    return "\n".join(lines)
+
+
+def build_prompt(
+    question: str,
+    result: RetrievalResult,
+    history: Sequence[dict[str, str]] | None = None,
+) -> tuple[str, list[Citation]]:
     blocks, citations = _evidence_blocks(result.hits)
-    parts = [f"问题：{question}", f"证据：\n{blocks}"]
+    parts = [f"问题：{question}"]
+    history_text = _history_block(history)
+    if history_text:
+        parts.append(
+            "对话历史（用于理解指代和延续上下文；它不是新的文档证据，不要为它编造引用）：\n"
+            + history_text
+        )
+    parts.append(f"证据：\n{blocks}")
     facts = _facts_block(result)
     if facts:
         parts.append(f"图谱事实（可辅助推理，引用时仍需对应到上面的编号）：\n{facts}")
@@ -172,6 +195,8 @@ def synthesize(
     result: RetrievalResult,
     provider,
     config: dict,
+    *,
+    history: Sequence[dict[str, str]] | None = None,
 ) -> Answer:
     cfg = config.get("answer", {}) or {}
     min_score = float(cfg.get("min_score", 0.005))
@@ -192,7 +217,7 @@ def synthesize(
     if provider is None or provider.is_mock:
         return _extractive(question, hits, result, cfg)
 
-    prompt, citations = build_prompt(question, result)
+    prompt, citations = build_prompt(question, result, history=history)
     try:
         text = provider.chat.complete(
             SYSTEM_PROMPT, prompt, max_tokens=int(cfg.get("max_tokens", 900))

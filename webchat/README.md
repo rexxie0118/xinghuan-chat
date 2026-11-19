@@ -74,6 +74,13 @@ GitHub 导入见 [screenshots/github-import.jpg](screenshots/github-import.jpg)�
 
 离线模式下回答会明确标注「离线抽取」，不会假装调用过大模型。
 
+### 多轮对话
+
+- 会话历史持久化在 SQLite，刷新后仍然存在；
+- Chat / Agent / Prompt Skill 会把最近 8 条消息放进 LLM 上下文；
+- 检索阶段会把「他 / 它 / 那…呢 / 还有」这类追问与上一轮问题合并，避免只拿半句话去检索；
+- 本地 mock 没有语言推理能力，不参与多轮理解；配置 DeepSeek/ARK 后才是完整的多轮体验。
+
 ---
 
 ## 3. 多部门知识库
@@ -433,9 +440,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest webchat.tests.test_api -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 用户隔离。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 用户隔离。
 
-> 当前共 11 项测试，全部通过。
+> 当前共 12 项测试，全部通过。
 
 ---
 

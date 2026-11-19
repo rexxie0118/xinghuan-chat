@@ -320,6 +320,38 @@ print(f"nested script ok: {sys.argv[1]} [1]")
             client.delete(f"/api/agents/{skill['id']}")
             client.delete(f"/api/agents/{agent['id']}")
 
+    def test_multi_turn_history_is_in_prompt_and_followup_query(self):
+        from kb.answer import build_prompt
+        from kb.retrieval import ChunkHit, RetrievalResult
+        from webchat.agent import AgentRunner
+
+        query = AgentRunner._retrieval_query(
+            "那产品负责人呢？",
+            [{"role": "user", "content": "北极星项目的负责人是谁？"}],
+        )
+        self.assertIn("北极星项目", query)
+        self.assertIn("产品负责人", query)
+
+        hit = ChunkHit(
+            chunk_id="chk_1",
+            doc_id="doc_1",
+            doc_title="测试文档",
+            heading_path="基本信息",
+            text="北极星项目的负责人是林晓。",
+            score=0.1,
+        )
+        result = RetrievalResult(query="那产品负责人呢？", hits=[hit])
+        prompt, _ = build_prompt(
+            "那产品负责人呢？",
+            result,
+            history=[
+                {"role": "user", "content": "北极星项目的负责人是谁？"},
+                {"role": "assistant", "content": "负责人是林晓。"},
+            ],
+        )
+        self.assertIn("对话历史", prompt)
+        self.assertIn("负责人是林晓", prompt)
+
     def test_github_url_parser(self):
         from webchat.github_importer import parse_github_url
 
