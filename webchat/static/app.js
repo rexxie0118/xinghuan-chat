@@ -1325,6 +1325,7 @@
       else if (meta.mode === "agent") head.append(badge("Agent", "accent"));
       else if (meta.mode === "rag") head.append(badge("Chat", ""));
       if (meta.answer_mode === "llm") head.append(badge("LLM 生成", "mint"));
+      else if (meta.answer_mode === "llm_general") head.append(badge("LLM 通用", ""));
       else if (meta.answer_mode === "extractive") head.append(badge("离线抽取", ""));
       if (meta.requires_model) head.append(badge("需要 LLM", ""));
       if (meta.confidence && Number(meta.confidence) > 0) {

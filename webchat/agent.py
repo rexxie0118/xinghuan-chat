@@ -79,6 +79,11 @@ class AgentResult:
         }
 
 
+REFUSAL_RE = re.compile(
+    r"(证据(中|里)?(没有|未|不足)|无法(给出|回答|提供)|"
+    r"没有(关于|找到|足够)|知识库(中|里)?(没有|未)|不能回答)"
+)
+
 SMALLTALK = re.compile(
     r"^(你好|您好|hi|hello|hey|嗨|在吗|你是谁|你叫什么|介绍一下你自己|你能做什么|帮助|help)[!！。？?\s]*$",
     re.IGNORECASE,
@@ -263,6 +268,69 @@ class AgentRunner:
             }
         answer_ms = int((time.perf_counter() - started) * 1000)
 
+        # Chat mode should still be able to answer general questions. The
+        # knowledge-base prompt is intentionally strict, so if it refuses or
+        # finds no evidence, fall back to the model's general knowledge and
+        # label the answer clearly instead of pretending it is grounded.
+        if (
+            mode == "rag"
+            and not kb.provider.is_mock
+            and (
+                answer_dict.get("mode") == "no-answer"
+                or REFUSAL_RE.search(answer_dict.get("answer") or "")
+            )
+        ):
+            status("切换通用回答", "知识库证据不足，使用模型通用知识")
+            general_started = time.perf_counter()
+            general = self._general_answer(question, history, kb)
+            if general:
+                general_ms = int((time.perf_counter() - general_started) * 1000)
+                trace = list(base_trace)
+                trace.append(
+                    _step(
+                        "通用知识回答",
+                        "知识库证据不足，改用模型通用知识；回答不附知识库引用",
+                        kind="answer",
+                        duration_ms=general_ms,
+                        logic=(
+                            "严格 RAG prompt 只允许使用证据；当它拒答或检索无结果时，"
+                            "Chat 模式改用通用知识 prompt，并明确标注未使用知识库。"
+                            "公司内部问题仍应优先查知识库，不能把通用回答当成有出处的结论。"
+                        ),
+                        code=(
+                            "if answer.mode == 'no-answer' or refusal(answer.text):\n"
+                            "    text = provider.chat.complete(GENERAL_SYSTEM_PROMPT, q)\n"
+                            "    return Answer(text, citations=[], mode='llm_general')"
+                        ),
+                    )
+                )
+                warnings = [
+                    "知识库没有足够证据，已使用模型通用知识回答；该回答没有知识库引用"
+                ]
+                return AgentResult(
+                    answer=general,
+                    citations=[],
+                    trace=trace,
+                    suggestions=kb.suggestions(question, result),
+                    engine="local",
+                    mode=mode,
+                    graph=result.get("graph", {}),
+                    warnings=warnings,
+                    meta={
+                        "answer_mode": "llm_general",
+                        "general_knowledge": True,
+                        "confidence": 0.45,
+                        "timings": result.get("stats", {}).get("timings", {}),
+                        "kb_id": kb.info.id,
+                        "kb_name": kb.info.name,
+                        "retrieval": {
+                            "hits": len(result.get("hits", [])),
+                            "entities": len(result.get("graph", {}).get("nodes", [])),
+                            "relations": len(result.get("graph", {}).get("edges", [])),
+                        },
+                    },
+                )
+
         trace = list(base_trace)
         trace.append(
             _step(
@@ -325,6 +393,28 @@ class AgentRunner:
                 },
             },
         )
+
+    @staticmethod
+    def _general_answer(
+        question: str, history: list[dict[str, str]], kb: KnowledgeService
+    ) -> str:
+        history_text = ""
+        for message in history[-8:]:
+            role = "用户" if message.get("role") == "user" else "助手"
+            text = " ".join((message.get("content") or "").split())
+            if text:
+                history_text += f"{role}：{text[:700]}\n"
+        system = (
+            "你是星环 Chat。当前知识库没有足够证据，请用你的通用知识回答。"
+            "要求：1) 明确这是通用知识，不是知识库结论；"
+            "2) 不要编造知识库引用；3) 涉及公司内部、实时数据或不确定的事实时，"
+            "明确说明无法确认；4) 用中文简洁回答。"
+        )
+        user = (
+            (f"对话历史：\n{history_text}\n" if history_text else "")
+            + f"问题：{question}"
+        )
+        return (kb.provider.chat.complete(system, user, max_tokens=1200) or "").strip()
 
     # ------------------------------------------------------------- imported
 
