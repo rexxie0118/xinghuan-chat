@@ -1299,24 +1299,22 @@
     avatar.className = "msg-avatar";
     if (message.role === "assistant") {
       avatar.innerHTML = `<svg class="icon"><use href="#i-sparkle"/></svg>`;
-    } else {
-      avatar.textContent = (state.user?.display_name || "U").slice(0, 1).toUpperCase();
     }
 
     const body = document.createElement("div");
     body.className = "msg-body";
 
-    const head = document.createElement("div");
-    head.className = "msg-head";
-    const author = document.createElement("span");
-    author.className = "msg-author";
-    author.textContent = message.role === "assistant" ? "星环" : state.user?.display_name || "你";
-    const time = document.createElement("span");
-    time.className = "msg-time";
-    time.textContent = timeLabel(message.created_at);
-    head.append(author, time);
-
     if (message.role === "assistant") {
+      const head = document.createElement("div");
+      head.className = "msg-head";
+      const author = document.createElement("span");
+      author.className = "msg-author";
+      author.textContent = "星环";
+      const time = document.createElement("span");
+      time.className = "msg-time";
+      time.textContent = timeLabel(message.created_at);
+      head.append(author, time);
+
       const meta = message.meta || {};
       if (meta.engine === "imported") {
         head.append(badge(`导入 ${meta.pipeline ? "Pipeline" : meta.agent_kind === "skill" ? "Skill" : "Agent"}`, "mint"));
@@ -1332,13 +1330,28 @@
         head.append(badge(`置信度 ${Math.round(Number(meta.confidence) * 100)}%`, ""));
       }
       if (streaming) head.append(badge("正在生成", "accent"));
+      body.append(head);
     }
 
     const content = document.createElement("div");
     content.className = "msg-content";
     if (message.content) content.innerHTML = renderMarkdown(message.content);
 
-    body.append(head, content);
+    if (message.role === "user") {
+      const bubble = document.createElement("div");
+      bubble.className = "msg-bubble";
+      bubble.append(content);
+      if (!streaming) {
+        // Put time/copy at the end of the last text line, not on a new row.
+        const meta = buildUserMeta(message);
+        const lastBlock = content.lastElementChild;
+        if (lastBlock) lastBlock.append(meta);
+        else content.append(meta);
+      }
+      body.append(bubble);
+    } else {
+      body.append(content);
+    }
 
     if (streaming) {
       const live = document.createElement("div");
@@ -1383,11 +1396,12 @@
       }
     }
 
-    if (!streaming) {
+    if (!streaming && message.role !== "user") {
       body.append(buildTools(message));
     }
 
-    article.append(avatar, body);
+    if (message.role === "assistant") article.append(avatar, body);
+    else article.append(body);
     return article;
   }
 
@@ -1398,23 +1412,46 @@
     return span;
   }
 
+  async function copyMessage(message) {
+    try {
+      await navigator.clipboard.writeText(message.content || "");
+      toast("已复制到剪贴板");
+    } catch {
+      toast("浏览器未允许复制", "error");
+    }
+  }
+
+  function copyButton(message, label = "复制") {
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "tool-btn";
+    copy.title = "复制";
+    copy.setAttribute("aria-label", "复制");
+    copy.innerHTML = `<svg class="icon"><use href="#i-copy"/></svg>`;
+    if (label) {
+      const text = document.createElement("span");
+      text.textContent = label;
+      copy.append(text);
+    }
+    copy.addEventListener("click", () => copyMessage(message));
+    return copy;
+  }
+
+  function buildUserMeta(message) {
+    const meta = document.createElement("span");
+    meta.className = "msg-user-meta";
+    const time = document.createElement("span");
+    time.className = "msg-time";
+    time.textContent = timeLabel(message.created_at);
+    meta.append(time, copyButton(message, ""));
+    return meta;
+  }
+
   function buildTools(message) {
     const tools = document.createElement("div");
     tools.className = "msg-tools";
     if (message.content) {
-      const copy = document.createElement("button");
-      copy.type = "button";
-      copy.className = "tool-btn";
-      copy.innerHTML = `<svg class="icon"><use href="#i-copy"/></svg><span>复制</span>`;
-      copy.addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(message.content);
-          toast("已复制到剪贴板");
-        } catch {
-          toast("浏览器未允许复制", "error");
-        }
-      });
-      tools.append(copy);
+      tools.append(copyButton(message));
     }
     if (message.citations?.length) {
       const divider = document.createElement("span");

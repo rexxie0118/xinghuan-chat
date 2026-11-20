@@ -856,7 +856,10 @@ html[data-theme="light"] .theme-icon-moon { display: none; }
 .msg.user .msg-body {
   flex: 0 1 auto; max-width: 82%;
   margin-left: auto;
-  padding: 12px 16px;
+}
+.msg.user .msg-bubble {
+  display: inline-block; max-width: 100%;
+  padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 15px 4px 15px 15px;
   background: var(--user-bubble);
@@ -921,6 +924,18 @@ html[data-theme="light"] .theme-icon-moon { display: none; }
 }
 .citation-ref:hover { background: var(--accent); color: #071018; }
 .msg.user .msg-content { font-size: 13.5px; }
+.msg-user-meta {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: 8px; vertical-align: middle; white-space: nowrap;
+}
+.msg-user-meta .msg-time { font-size: 9px; }
+.msg-user-meta .tool-btn {
+  height: 18px; width: 18px; padding: 0;
+  justify-content: center; border-radius: 4px;
+  color: var(--faint); opacity: .7;
+}
+.msg-user-meta .tool-btn:hover { opacity: 1; color: var(--text-soft); background: var(--line-soft); }
+.msg-user-meta .tool-btn .icon { width: 11px; height: 11px; }
 
 .msg-tools {
   display: flex; align-items: center; gap: 5px;
