@@ -1,0 +1,32 @@
+{
+  "product": "星环 Chat",
+  "updated_at": "2026-11-20",
+  "iterations": [
+    {
+      "id": "2026-11-20-01",
+      "title": "Agent Runtime 基础层：MCP、Apple Container、AgentKernel",
+      "date": "2026-11-20",
+      "summary": "补齐 MCP 工具注册表、Apple Container 一次性执行沙箱、AgentKernel hook bus，并保留现有 RAG / ImportedAgent 行为。",
+      "record": "iterations/2026-11-20-01.html",
+      "diagrams": [
+        "architecture/2026-11-20-agent-kernel.svg"
+      ]
+    }
+  ],
+  "architecture": [
+    {
+      "id": "2026-11-19-v0",
+      "label": "v0 · RAG + Agent 基线",
+      "date": "2026-11-19",
+      "src": "architecture/2026-11-19-v0-baseline.svg",
+      "note": "MCP / Apple Container / AgentKernel 之前的基线，补录用于保留演进历史。"
+    },
+    {
+      "id": "2026-11-20-v1",
+      "label": "v1 · MCP + Apple Container + AgentKernel",
+      "date": "2026-11-20",
+      "src": "architecture/2026-11-20-agent-kernel.svg",
+      "note": "当前架构。MCP 与 Apple Container 是外部执行边界；AgentKernel 只提供 hook seam。"
+    }
+  ]
+}

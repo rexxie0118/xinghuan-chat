@@ -72,6 +72,19 @@ class ApiTest(unittest.TestCase):
             bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
             self.assertEqual(bad.status_code, 400)
 
+    def test_docs_site_is_served(self):
+        with TestClient(self.app) as client:
+            page = client.get("/docs/")
+            self.assertEqual(page.status_code, 200)
+            self.assertIn("星环 Chat", page.text)
+            manifest = client.get("/docs/manifest.json")
+            self.assertEqual(manifest.status_code, 200)
+            data = manifest.json()
+            self.assertTrue(data["iterations"])
+            diagram = client.get("/docs/" + data["architecture"][0]["src"])
+            self.assertEqual(diagram.status_code, 200)
+            self.assertIn("svg", diagram.headers["content-type"])
+
     def test_health_and_meta(self):
         with TestClient(self.app) as client:
             health = client.get("/api/health")

@@ -1,0 +1,107 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-20-01</div>
+    <h1>Agent Runtime 基础层：MCP、Apple Container、AgentKernel</h1>
+    <p class="lede">
+      这次迭代不重写 RAG / ImportedAgent，而是在它们外面补三个可扩展的地基：
+      工具边界、执行边界、运行时 hook 边界。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：25 项通过</span>
+      <span>架构：v1</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>本迭代完成</h2>
+    <div class="change-grid">
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>MCP Tool Registry</h3>
+        <p>stdio / HTTP MCP client、tools/list、tools/call、allowlist、超时、输出截断、调用日志。</p>
+        <code>webchat/tools.py</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Apple Container Runner</h3>
+        <p>一次性容器执行 Agent 脚本，只读 rootfs、cap-drop、资源限制、host volume 输入输出、产物回传。</p>
+        <code>webchat/sandbox/apple.py</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>AgentKernel + HookBus</h3>
+        <p>agent_start / retrieval / answer / tool / agent_end 生命周期 hook，hook 异常隔离，现有行为不变。</p>
+        <code>webchat/runtime/</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>关键决策</h2>
+    <ul>
+      <li><strong>不重写成 Pi</strong>：借鉴 extension 的 hook 设计，但保留 FastAPI + Python + 多用户产品壳。</li>
+      <li><strong>插件先做可信内部插件</strong>：运行在 Web 进程内；租户代码不允许 in-process。</li>
+      <li><strong>不可信执行外置</strong>：MCP 是外部工具边界，Apple Container 是不可信脚本边界。</li>
+      <li><strong>当前不是高并发架构</strong>：单进程、SQLite、同步 LLM/MCP/Container；已在 todo 中拆队列/Worker。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-20-agent-kernel.svg" alt="v1 architecture" />
+      <figcaption>v1：AgentKernel 位于控制面与执行引擎之间；MCP 与 Apple Container 是外部边界。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">3 项完成，22 项待办。完整清单如下。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>完成内部 Plugin API 与 manifest</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>实现真正的 Tool Loop</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>验证与风险</h2>
+    <ul>
+      <li>API / runtime / MCP / sandbox 共 25 项测试通过。</li>
+      <li>Apple Container 只做了 fake CLI 测试；本机 macOS 15.6.1，无 Apple Container CLI，未做真实 VM 执行。</li>
+      <li>MCP 已可发现/调用，但尚未接入 LLM 自动循环。</li>
+      <li>当前仍为单进程 + SQLite + 同步 LLM，生产高并发需要队列化与 Postgres。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>完成内部 Plugin API / manifest，然后实现 Tool Loop；Tool Loop 必须复用 ToolRegistry 和 AgentKernel hook，不再写死到 AgentRunner。</p>
+  </section>
+</article>

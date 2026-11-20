@@ -217,7 +217,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             tools.close()
 
-    app = FastAPI(title=APP_NAME, version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title=APP_NAME,
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/api/docs",
+        redoc_url=None,
+    )
     app.state.settings = settings
     app.state.registry = registry
     app.state.kb = registry.get(registry.infos[0].id)
@@ -1029,6 +1035,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --------------------------------------------------------------- static
 
     app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
+    docs_dir = settings.root / "docs"
+    if docs_dir.exists():
+        app.mount("/docs", StaticFiles(directory=docs_dir, html=True), name="docs")
 
     @app.get("/favicon.svg", include_in_schema=False)
     def favicon() -> FileResponse:

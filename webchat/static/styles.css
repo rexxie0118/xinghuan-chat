@@ -724,6 +724,13 @@ html[data-theme="light"] .theme-icon-moon { display: none; }
   color: var(--text); background: var(--panel-3);
   box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
 }
+.docs-btn {
+  height: 28px; padding: 0 9px; border: 1px solid var(--line);
+  border-radius: 7px; display: inline-flex; align-items: center; gap: 5px;
+  color: var(--muted); font-size: 9.5px;
+}
+.docs-btn:hover { color: var(--text); border-color: var(--line-strong); background: var(--line-soft); }
+.docs-btn .icon { width: 12px; height: 12px; color: var(--accent); }
 .engine-badge {
   display: flex; align-items: center; gap: 6px;
   font-size: 9.5px; color: var(--muted);
@@ -1686,6 +1693,8 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
   .composer-foot { display: none; }
   .kb-stats b { font-size: 15px; }
   .engine-badge { display: none; }
+  .docs-btn { padding: 0 7px; }
+  .docs-btn span { display: none; }
   .msg.user .msg-avatar { display: none; }
   .msg.user .msg-body { max-width: 100%; }
   .panel-body { padding: 14px 12px 20px; }

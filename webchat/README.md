@@ -619,6 +619,21 @@ agents(id, user_id, name, description, markdown, entrypoint,
 
 ---
 
+### Docs：迭代记录与架构历史
+
+页面右上角 **Docs** 进入 `/docs/`。
+
+每次迭代必须同时新增：
+
+```text
+webchat/docs/iterations/<date>-<nn>.html   迭代记录 + Todo 快照
+webchat/docs/architecture/<date>-*.svg    当前架构图
+```
+
+然后更新 `webchat/docs/manifest.json`。架构图只追加、不覆盖，旧版本保留在「架构历史」中。
+
+规则见 [`webchat/docs/README.md`](docs/README.md)。
+
 ### AgentKernel 与插件扩展点
 
 `webchat/runtime/` 是 P0 的 kernel 层，不重写现有 RAG / ImportedAgent：
@@ -684,9 +699,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点。
 
-> 当前共 25 项测试，全部通过。
+> 当前共 26 项测试，全部通过。
 
 ---
 

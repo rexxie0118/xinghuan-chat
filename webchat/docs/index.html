@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>星环 Chat · Docs</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+  <div class="docs-shell">
+    <aside class="docs-side">
+      <a class="brand" href="/">
+        <span class="brand-mark">星</span>
+        <span><strong>星环 Chat</strong><small>DOCS</small></span>
+      </a>
+      <div class="side-label">ITERATIONS</div>
+      <nav id="iteration-nav" class="side-nav"></nav>
+      <div class="side-label">VIEWS</div>
+      <nav class="side-nav">
+        <button id="todo-link" class="side-link" type="button">
+          <span class="side-ico">☷</span><span>当前 Todo</span>
+        </button>
+        <button id="arch-link" class="side-link" type="button">
+          <span class="side-ico">⌘</span><span>架构历史</span>
+        </button>
+      </nav>
+      <div class="side-foot">
+        <a href="/">← 返回聊天</a>
+        <span id="updated-at"></span>
+      </div>
+    </aside>
+    <main class="docs-main">
+      <header class="docs-top">
+        <div>
+          <div class="top-eyebrow">ENGINEERING HANDBOOK</div>
+          <h1 id="page-title">工程手册</h1>
+        </div>
+        <div class="top-pill">每次迭代：记录 + Todo + 架构图</div>
+      </header>
+      <div id="docs-content" class="docs-content">
+        <div class="loading">正在加载 docs…</div>
+      </div>
+    </main>
+  </div>
+  <script src="docs.js"></script>
+</body>
+</html>
