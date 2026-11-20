@@ -33,6 +33,7 @@ python3 -m venv .venv
 - 左侧 Agent / Skill 子菜单，维护导入项
 - 导入 Agent Markdown + `.py` / `.sh` / `.js` 参考脚本
 - 从 GitHub 仓库/目录自动导入 `SKILL.md` / `AGENT.md`
+- MCP stdio/HTTP 工具注册表（白名单、超时、调用 API）
 - Agent 模式执行脚本，展示 stdout / stderr / exit code / 工具轨迹
 - RAG 混合检索 + 本体图谱 + 引用回查
 - 多用户、HttpOnly Session、SQLite 持久化

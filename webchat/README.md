@@ -344,7 +344,78 @@ timeout: 8
 
 ---
 
-## 5. 接入另一个 repo 的 Agent
+## 5. MCP 工具注册表
+
+MVP 已加在 `webchat/tools.py`，不依赖额外 MCP SDK：
+
+- **stdio MCP**：newline-delimited JSON-RPC，自动 `initialize` + `notifications/initialized`；
+- **HTTP MCP**：JSON-RPC POST，支持 JSON 和 SSE 响应、`Mcp-Session-Id`；
+- 工具发现：`tools/list`；
+- 调用：`tools/call`；
+- 每个 server 必须显式 `allow_tools`；
+- 单次调用超时、输出截断（20k 字符）、server 状态隔离；
+- 配置里的 `${ENV_VAR}` 会展开，token 不进入代码。
+
+### 配置
+
+```bash
+cp webchat/mcp.example.json webchat/mcp.json
+```
+
+`webchat/mcp.json` 已 gitignore。示例：
+
+```json
+{
+  "servers": {
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "enabled": true,
+      "allow_tools": ["read_file", "list_directory"],
+      "timeout": 10
+    }
+  }
+}
+```
+
+HTTP server：
+
+```json
+{
+  "servers": {
+    "remote": {
+      "transport": "http",
+      "url": "https://example.com/mcp",
+      "headers": {"Authorization": "Bearer ${MCP_TOKEN}"},
+      "enabled": true,
+      "allow_tools": ["search"],
+      "timeout": 10
+    }
+  }
+}
+```
+
+配置完成后重启服务。
+
+### API
+
+| 接口 | 作用 |
+| --- | --- |
+| `GET /api/tools` | server 状态、已发现工具、JSON Schema |
+| `POST /api/tools/{name}/call` | 调用工具，body `{"arguments": {...}}` |
+| `GET /api/meta` | 包含 `tools` 摘要 |
+
+当前只打通了 registry 和调用层，**还没有把工具暴露给 LLM 自动循环**；下一步是 Tool Loop。
+
+安全边界：
+
+- `allow_tools` 是白名单，默认 `["*"]` 仅用于本地受信配置；
+- stdio server 以独立进程运行，但仍是本机权限，不是强沙箱；
+- HTTP server 的 URL/header 由管理员配置，不对普通用户开放修改；
+- 工具输出会截断，避免无界上下文。
+
+## 6. 接入另一个 repo 的 Agent
 
 星环 Chat **不 import** Agent 代码，只依赖 HTTP。配置：
 
@@ -419,7 +490,7 @@ WEBCHAT_AGENT_URL=http://127.0.0.1:8790 .venv/bin/python -m webchat --port 8788
 
 ---
 
-## 6. RAG + Ontology
+## 7. RAG + Ontology
 
 知识库引擎来自仓库根目录的 `kb/`，Web 层只做适配：
 
@@ -487,7 +558,7 @@ export ARK_API_KEY=...
 
 ---
 
-## 7. 多用户与数据模型
+## 8. 多用户与数据模型
 
 ```sql
 users(id, username UNIQUE, display_name, password_hash, department, created_at)
@@ -511,7 +582,7 @@ agents(id, user_id, name, description, markdown, entrypoint,
 
 ---
 
-## 8. 配置
+## 9. 配置
 
 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- |
@@ -523,6 +594,8 @@ agents(id, user_id, name, description, markdown, entrypoint,
 | `WEBCHAT_ALLOW_SCRIPT_EXEC` | `true` | 是否允许执行导入 Agent 的参考脚本 |
 | `WEBCHAT_SANDBOX` | `local` | 执行后端；当前为 `local`，可注册 `docker` / `k8s` 实现 |
 | `GITHUB_TOKEN` | 空 | 导入私有 GitHub 仓库 / 提高 API 速率限制 |
+| `WEBCHAT_MCP_CONFIG` | `webchat/mcp.json` | MCP server 配置；文件不存在则工具为空 |
+| `WEBCHAT_TOOLS_ENABLED` | `true` | 是否启用 MCP 工具注册表 |
 | `DEEPSEEK_API_KEY` | 空 | DeepSeek Key；配合 `WEBCHAT_KB_PROVIDER=deepseek` |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | DeepSeek 兼容网关地址 |
 | `DEEPSEEK_MODEL` | `deepseek-chat` | 可换 `deepseek-reasoner` |
@@ -537,20 +610,20 @@ agents(id, user_id, name, description, markdown, entrypoint,
 
 ---
 
-## 9. 测试
+## 10. 测试
 
 ```bash
 cd xinghuan-chat
-.venv/bin/python -m unittest webchat.tests.test_api -v
+.venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API。
 
-> 当前共 15 项测试，全部通过。
+> 当前共 21 项测试，全部通过。
 
 ---
 
-## 10. 目录
+## 11. 目录
 
 ```
 webchat/
@@ -560,6 +633,7 @@ webchat/
 ├── security.py             scrypt、Session Token
 ├── knowledge.py            kb 引擎适配、多知识库注册表、检索/图谱/实体
 ├── agent.py                本地 / 外部 / 导入 Agent 编排
+├── tools.py                MCP stdio/HTTP client + Tool Registry
 ├── agent_defs.py           Agent / Skill 导入、解析、存储
 ├── github_importer.py      GitHub 仓库/目录导入（API + URL 校验）
 ├── artifacts.py            运行产物持久化、下载、run 归属校验
@@ -578,7 +652,7 @@ webchat/
 
 ---
 
-## 11. 边界与下一步
+## 12. 边界与下一步
 
 这是可运行的 Demo，不是生产系统：
 

@@ -60,6 +60,8 @@ class Settings:
     seed_demo_users: bool
     allow_script_exec: bool = True
     sandbox: str = "local"
+    mcp_config: Path | None = None
+    tools_enabled: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -88,6 +90,10 @@ class Settings:
             seed_demo_users=_env_bool("WEBCHAT_SEED_DEMO_USERS", True),
             allow_script_exec=_env_bool("WEBCHAT_ALLOW_SCRIPT_EXEC", True),
             sandbox=(os.getenv("WEBCHAT_SANDBOX") or "local").strip(),
+            mcp_config=Path(
+                os.getenv("WEBCHAT_MCP_CONFIG", ROOT / "mcp.json")
+            ).expanduser(),
+            tools_enabled=_env_bool("WEBCHAT_TOOLS_ENABLED", True),
         )
         settings.ensure_dirs()
         return settings

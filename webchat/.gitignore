@@ -6,3 +6,6 @@ data/
 *.sqlite3-shm
 __pycache__/
 .pytest_cache/
+
+# Local MCP server config may contain tokens
+mcp.json

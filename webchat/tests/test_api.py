@@ -62,6 +62,16 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.text)
         return resp.json()["user"]
 
+    def test_tools_endpoint_without_mcp_config(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            resp = client.get("/api/tools")
+            self.assertEqual(resp.status_code, 200)
+            self.assertFalse(resp.json()["enabled"])
+            self.assertEqual(resp.json()["tools"], [])
+            bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
+            self.assertEqual(bad.status_code, 400)
+
     def test_health_and_meta(self):
         with TestClient(self.app) as client:
             health = client.get("/api/health")

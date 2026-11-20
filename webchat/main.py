@@ -35,6 +35,7 @@ from .config import Settings
 from .db import connect, init_db
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
+from .tools import ToolError, build_tool_registry
 from .security import (
     COOKIE_NAME,
     hash_password,
@@ -92,6 +93,10 @@ class AgentIn(BaseModel):
     entrypoint: str | None = Field(default=None, max_length=200)
     markdown: str = Field(min_length=1)
     files: list[AgentFileIn] = Field(default_factory=list)
+
+
+class ToolCallIn(BaseModel):
+    arguments: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentTestIn(BaseModel):
@@ -192,6 +197,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     registry = KnowledgeRegistry(settings)
     sandbox = build_sandbox_runner(settings)
     runner = AgentRunner(settings, sandbox)
+    tools = build_tool_registry(settings)
 
     conn = connect(settings.db_path)
     try:
@@ -204,7 +210,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         LOG.info("星环 Chat ready at %s", settings.db_path)
-        yield
+        try:
+            yield
+        finally:
+            tools.close()
 
     app = FastAPI(title=APP_NAME, version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
@@ -212,6 +221,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.kb = registry.get(registry.infos[0].id)
     app.state.sandbox = sandbox
     app.state.runner = runner
+    app.state.tools = tools
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -276,6 +286,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "departments": registry.departments,
             "default_department": registry.default_department,
             "knowledge_bases": registry.catalog_public(),
+            "tools": tools.summary(),
             "kb": {
                 "provider": default_service.provider.kind,
                 "chat_model": getattr(
@@ -369,6 +380,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "default": default.info.id if default else None,
             "departments": registry.departments,
         }
+
+    # --------------------------------------------------------------- tools
+
+    @app.get("/api/tools")
+    def list_tools(user: dict[str, Any] = User) -> dict[str, Any]:
+        return tools.summary()
+
+    @app.post("/api/tools/{name:path}/call")
+    def call_tool(
+        name: str, payload: ToolCallIn, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        try:
+            result = tools.call(name, payload.arguments)
+        except ToolError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"result": result.public()}
 
     # -------------------------------------------------------------- agents
 

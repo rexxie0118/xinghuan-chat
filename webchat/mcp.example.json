@@ -1,0 +1,22 @@
+{
+  "servers": {
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "enabled": false,
+      "allow_tools": ["read_file", "list_directory", "search_files"],
+      "timeout": 10
+    },
+    "remote": {
+      "transport": "http",
+      "url": "https://example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_TOKEN}"
+      },
+      "enabled": false,
+      "allow_tools": ["*"],
+      "timeout": 10
+    }
+  }
+}
