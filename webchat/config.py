@@ -62,6 +62,11 @@ class Settings:
     sandbox: str = "local"
     mcp_config: Path | None = None
     tools_enabled: bool = True
+    apple_container_bin: str = "container"
+    apple_container_image: str = "python:3.12-slim"
+    apple_container_cpus: int = 2
+    apple_container_memory: str = "2G"
+    apple_container_network: str = "default"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -94,6 +99,13 @@ class Settings:
                 os.getenv("WEBCHAT_MCP_CONFIG", ROOT / "mcp.json")
             ).expanduser(),
             tools_enabled=_env_bool("WEBCHAT_TOOLS_ENABLED", True),
+            apple_container_bin=(os.getenv("APPLE_CONTAINER_BIN") or "container").strip(),
+            apple_container_image=(
+                os.getenv("APPLE_CONTAINER_IMAGE") or "python:3.12-slim"
+            ).strip(),
+            apple_container_cpus=int(os.getenv("APPLE_CONTAINER_CPUS", "2")),
+            apple_container_memory=(os.getenv("APPLE_CONTAINER_MEMORY") or "2G").strip(),
+            apple_container_network=(os.getenv("APPLE_CONTAINER_NETWORK") or "default").strip(),
         )
         settings.ensure_dirs()
         return settings

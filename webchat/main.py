@@ -283,6 +283,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "version": "0.1.0",
             "agent_enabled": settings.agent_enabled,
             "agent_engine": "external" if settings.agent_enabled else "local",
+            "sandbox": settings.sandbox,
             "departments": registry.departments,
             "default_department": registry.default_department,
             "knowledge_bases": registry.catalog_public(),
@@ -308,6 +309,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 svc.info.id: svc.corpus for svc in registry.all()
             },
             "agent": "external" if settings.agent_enabled else "local",
+            "sandbox": settings.sandbox,
         }
 
     # ---------------------------------------------------------------- auth

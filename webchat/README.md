@@ -317,11 +317,48 @@ timeout: 8
 
 参考示例：[examples/sample_agent/AGENT.md](examples/sample_agent/AGENT.md) 和 [run.py](examples/sample_agent/run.py)。
 
+### Apple Container 执行后端
+
+Apple Container 把每个执行放进一个轻量 Linux VM，适合比本地 subprocess 更强的隔离：
+
+```bash
+# macOS 26+ / Apple silicon
+container system start
+
+cd /Users/rex/Documents/DeepseekWS/xinghuan-chat
+WEBCHAT_SANDBOX=apple-container \
+APPLE_CONTAINER_IMAGE=python:3.12-slim \
+../.venv/bin/python -m webchat --port 8787
+```
+
+实现：[`webchat/sandbox/apple.py`](sandbox/apple.py)。每次 `run()`：
+
+- `container run --rm` 创建一次性容器；
+- `/agent/in` 挂载输入，`/agent/out` 挂载输出；
+- rootfs `--read-only`，`--cap-drop ALL`，默认使用 Apple Container 的 `default` 网络；Apple CLI 目前没有 `none`，无网需要宿主防火墙/代理。
+- 只挂载临时输入/输出目录；
+- 超时后 `container stop` / `kill` / `delete`；
+- 产物在执行结束前复制到宿主机 artifact store。
+
+镜像必须包含所需 runtime：
+
+- Python：`python`
+- Bash：`bash`
+- Node：`node`
+
+限制：
+
+- 当前是 **一次性执行容器**，不是前面设计的“每用户常驻容器”；
+- Apple Container 官方要求 macOS 26+、Apple silicon；
+- 生产多租户 Linux 环境仍建议 Kubernetes + gVisor/Firecracker；
+- 不要在不可信 Agent 场景使用 `container machine`（它会挂载 home、开放全部 capability）。
+
 ### 执行边界
 
 这不是强沙箱，只是 Demo 级隔离：
 
 - 临时工作目录，脚本文件只在该目录内材料化；
+- 可选 Apple Container runner：每次执行一个一次性 Linux VM，rootfs 只读、无 capability、默认使用隔离网络配置；
 - 环境变量清空，只保留 PATH / TMPDIR 等最小集合；
 - 单次 timeout 最大 15 秒，输出截断；
 - 最多 250 个文件、单文件 512KB、总大小 5MB；
@@ -592,7 +629,12 @@ agents(id, user_id, name, description, markdown, entrypoint,
 | `WEBCHAT_KBS_CONFIG` | `webchat/kbs.json` | 部门、知识库与示例问题配置 |
 | `WEBCHAT_KB_PROVIDER` | `mock` | 所有知识库共用：`mock` / `deepseek` / `ark` / `openai` / `openai-compatible` |
 | `WEBCHAT_ALLOW_SCRIPT_EXEC` | `true` | 是否允许执行导入 Agent 的参考脚本 |
-| `WEBCHAT_SANDBOX` | `local` | 执行后端；当前为 `local`，可注册 `docker` / `k8s` 实现 |
+| `WEBCHAT_SANDBOX` | `local` | `local` / `apple-container`；docker/k8s 可注册 |
+| `APPLE_CONTAINER_BIN` | `container` | Apple Container CLI 路径 |
+| `APPLE_CONTAINER_IMAGE` | `python:3.12-slim` | Agent runtime 镜像，需包含对应 runtime |
+| `APPLE_CONTAINER_CPUS` | `2` | 每个执行容器的 CPU 配额 |
+| `APPLE_CONTAINER_MEMORY` | `2G` | 每个执行容器的内存配额 |
+| `APPLE_CONTAINER_NETWORK` | `default` | Apple Container 网络；不支持 `none`，需要无网时用宿主防火墙 |
 | `GITHUB_TOKEN` | 空 | 导入私有 GitHub 仓库 / 提高 API 速率限制 |
 | `WEBCHAT_MCP_CONFIG` | `webchat/mcp.json` | MCP server 配置；文件不存在则工具为空 |
 | `WEBCHAT_TOOLS_ENABLED` | `true` | 是否启用 MCP 工具注册表 |
@@ -617,9 +659,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物。
 
-> 当前共 21 项测试，全部通过。
+> 当前共 23 项测试，全部通过。
 
 ---
 
@@ -634,6 +676,7 @@ webchat/
 ├── knowledge.py            kb 引擎适配、多知识库注册表、检索/图谱/实体
 ├── agent.py                本地 / 外部 / 导入 Agent 编排
 ├── tools.py                MCP stdio/HTTP client + Tool Registry
+├── sandbox/apple.py        Apple Container 一次性执行 runner
 ├── agent_defs.py           Agent / Skill 导入、解析、存储
 ├── github_importer.py      GitHub 仓库/目录导入（API + URL 校验）
 ├── artifacts.py            运行产物持久化、下载、run 归属校验

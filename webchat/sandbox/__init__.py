@@ -1,9 +1,9 @@
 """Sandbox execution contract.
 
 Agent scripts must never be wired directly into the web process. The orchestrator
-talks to a ``SandboxRunner``; today only ``local`` is implemented, but a Docker /
-Kubernetes / gVisor runner can be registered without touching the Agent or chat
-layers.
+talks to a ``SandboxRunner``; today ``local`` and ``apple-container`` are
+implemented. A Docker / Kubernetes / gVisor runner can be registered without
+touching the Agent or chat layers.
 
 Adding a runner::
 
@@ -97,9 +97,12 @@ def build_sandbox_runner(settings: Any) -> SandboxRunner:
 
 
 def _register_builtin() -> None:
+    from .apple import AppleContainerRunner
     from .local import LocalSubprocessRunner
 
     register_runner("local", lambda settings: LocalSubprocessRunner(settings))
+    register_runner("apple-container", lambda settings: AppleContainerRunner(settings))
+    register_runner("apple", lambda settings: AppleContainerRunner(settings))
 
 
 _register_builtin()
