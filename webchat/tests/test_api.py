@@ -112,6 +112,9 @@ class ApiTest(unittest.TestCase):
             self.assertGreater(len(message["citations"]), 0)
             self.assertEqual(message["meta"]["mode"], "agent")
             self.assertGreater(len(message["meta"]["trace"]), 2)
+            by_title = {step["title"]: step for step in message["meta"]["trace"]}
+            self.assertTrue(by_title["理解问题"]["code"])
+            self.assertTrue(by_title["检索知识库"]["logic"])
 
             history = client.get(f"/api/conversations/{conv['id']}").json()
             self.assertEqual(len(history["messages"]), 2)

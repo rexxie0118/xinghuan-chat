@@ -40,6 +40,8 @@ def _step(
     status: str = "done",
     duration_ms: int = 0,
     data: dict[str, Any] | None = None,
+    logic: str = "",
+    code: str = "",
 ) -> dict[str, Any]:
     return {
         "title": title,
@@ -48,6 +50,8 @@ def _step(
         "status": status,
         "duration_ms": duration_ms,
         "data": data or {},
+        "logic": logic,
+        "code": code,
     }
 
 
@@ -131,6 +135,17 @@ class AgentRunner:
                 "理解问题",
                 f"{'Agent 工具循环' if mode == 'agent' else 'RAG 直答'} · 问题已归一化",
                 kind="think",
+                logic=(
+                    "1. question.strip() 去首尾空白；"
+                    "2. 短追问/指代词（他、它、那…呢、还有）用上一轮用户问题补全；"
+                    "3. 结果同时用于检索和生成，历史只作上下文、不当作文档证据。"
+                ),
+                code=(
+                    "q = (question or '').strip()\n"
+                    "if is_followup(q, history):\n"
+                    "    q = f\"{last_user_question} {q}\"[:500]\n"
+                    "retrieval.search(q, k=top_k)"
+                ),
             ),
             _step(
                 "检索知识库",
@@ -141,6 +156,24 @@ class AgentRunner:
                     "entities": len(result.get("graph", {}).get("nodes", [])),
                     "timings": result.get("stats", {}).get("timings", {}),
                 },
+                logic=(
+                    "混合召回后做 RRF 融合：\n"
+                    "1. 向量召回：归一化 embedding 与 chunk 向量做点积，取 top vector_k；\n"
+                    "2. FTS 召回：trigram / BM25 做字面命中，专有名词更稳；\n"
+                    "3. 图谱召回：从命中实体沿关系边扩展，补跨段落事实；\n"
+                    "4. RRF：每个来源按排名累加 weight/(rrf_k+rank)，不依赖分数可比；\n"
+                    "5. 取 top_k 候选后 hydrate 出 chunk 原文，再做 rerank。"
+                ),
+                code=(
+                    "vec = vector_topk(q, vector_k)\n"
+                    "fts = fts_bm25(q, fts_k)\n"
+                    "graph = graph_expand(entity_seeds(q))\n"
+                    "fused = {}\n"
+                    "for weight, ids in [(1.0, vec), (1.0, fts), (0.8, graph)]:\n"
+                    "    for rank, cid in enumerate(ids, 1):\n"
+                    "        fused[cid] = fused.get(cid, 0) + weight / (60 + rank)\n"
+                    "hits = hydrate(top(fused, k))"
+                ),
             ),
         ]
         if mode == "agent":
@@ -151,6 +184,16 @@ class AgentRunner:
                     f"沿关系边扩展 2 跳：{len(graph.get('nodes', []))} 个实体 /"
                     f" {len(graph.get('edges', []))} 条关系",
                     data={"nodes": len(graph.get("nodes", [])), "edges": len(graph.get("edges", []))},
+                    logic=(
+                        "以命中 chunk 的实体为 seed，沿 ontology_edges 做 2 跳 BFS；"
+                        "返回节点、关系和权重。图谱事实用于补全跨段落关系，"
+                        "但引用仍回填到 chunk，不直接伪造来源。"
+                    ),
+                    code=(
+                        "seeds = entities_in(hits)\n"
+                        "subgraph = ontology.expand(seeds, hops=2)\n"
+                        "nodes, edges = subgraph.nodes, subgraph.edges"
+                    ),
                 )
             )
             base_trace.append(
@@ -158,6 +201,22 @@ class AgentRunner:
                     "组合证据",
                     "把引用片段、图谱关系与对话上下文放进同一次作答",
                     kind="think",
+                    logic=(
+                        "1. 命中 chunk 按 [1]..[n] 编号，截断为证据块；\n"
+                        "2. 图谱事实单独成块，提示模型只作辅助推理；\n"
+                        "3. 最近 8 条对话单独成块，用于指代和延续；\n"
+                        "4. 拼成 problem + history + evidence + graph 的 prompt。"
+                    ),
+                    code=(
+                        "blocks, citations = evidence_blocks(hits)\n"
+                        "prompt = (\n"
+                        "    '问题：' + q + '\\n' +\n"
+                        "    '历史：' + history_block + '\\n' +\n"
+                        "    '证据：' + blocks + '\\n' +\n"
+                        "    '图谱：' + facts\n"
+                        ")\n"
+                        "answer = provider.chat.complete(SYSTEM_PROMPT, prompt)"
+                    ),
                 )
             )
 
@@ -211,6 +270,17 @@ class AgentRunner:
                 f"模式={answer_dict.get('mode')} · 置信度={answer_dict.get('confidence', 0)}",
                 kind="answer",
                 duration_ms=answer_ms,
+                logic=(
+                    "真实模型：把 SYSTEM_PROMPT + 问题/历史/证据/图谱交给 provider.chat；"
+                    "mock：按词重叠挑句子做抽取式摘要，不伪造流畅答案。"
+                ),
+                code=(
+                    "if provider.is_mock:\n"
+                    "    return extractive(question, hits)\n"
+                    "text = provider.chat.complete(SYSTEM_PROMPT, prompt)\n"
+                    "used = cited_indices(text, citations)\n"
+                    "return Answer(text, citations=used)"
+                ),
             )
         )
         if answer_dict.get("citations"):
@@ -219,6 +289,16 @@ class AgentRunner:
                     "校验引用",
                     f"{len(answer_dict['citations'])} 条引用已回填到原文片段",
                     kind="check",
+                    logic=(
+                        "用正则 CITE_RE 从回答中提取 [n]；只保留 1..len(citations) 的编号；"
+                        "每条引用回填 chunk_id / doc_title / heading_path / snippet，"
+                        "越界编号丢弃并给出警告。"
+                    ),
+                    code=(
+                        "used = {int(n) for n in re.findall(r'\\[(\\d+)\\]', text)}\n"
+                        "citations = [c for c in citations if c.index in used]\n"
+                        "if not used: warnings.append('未检测到有效引用')"
+                    ),
                 )
             )
 
@@ -266,6 +346,19 @@ class AgentRunner:
                 f"{agent.name} · {len(agent.files)} 个参考文件"
                 + (f" · 入口 {agent.entrypoint}" if agent.entrypoint else " · 未配置入口脚本"),
                 kind="think",
+                logic=(
+                    "从 agents 表读取 markdown + files_json；entrypoint 在临时 workspace 的 in/ 下"
+                    "材料化，路径必须留在工作区内。没有入口的 Skill 走 Prompt/Pipeline，"
+                    "不会假装执行 shell。"
+                ),
+                code=(
+                    "agent = load_agent(agent_id, user_id)\n"
+                    "files = materialize(agent.files, input_dir)\n"
+                    "if agent.entrypoint:\n"
+                    "    run_subprocess(agent.entrypoint, cwd=input_dir)\n"
+                    "else:\n"
+                    "    prompt_skill(agent.markdown)"
+                ),
             )
         )
         pipeline = agent.pipeline
@@ -353,6 +446,17 @@ class AgentRunner:
                         "生成 PPT 内容",
                         f"模型生成 {len(generated_html)} 字符 HTML，准备写入脚手架",
                         kind="answer",
+                        logic=(
+                            "Pipeline 先把 SKILL.md + 历史 + 证据交给 LLM，并强制要求输出完整 HTML；"
+                            "`_html_from_text()` 去掉 Markdown 围栏、从 <!DOCTYPE>/<html> 截取，"
+                            "写入 `_generated_content.html`，通过 AGENT_CONTENT_FILE 传给脚本。"
+                        ),
+                        code=(
+                            "html = provider.chat.complete(system, user, max_tokens=3000)\n"
+                            "content = html_from_text(html)\n"
+                            "files.append({'name': '_generated_content.html', 'content': content})\n"
+                            "env['AGENT_CONTENT_FILE'] = '_generated_content.html'"
+                        ),
                     )
                 )
         run_id = new_id("run")
@@ -391,6 +495,18 @@ class AgentRunner:
                         f"{agent.entrypoint} · exit={exit_code} · "
                         f"{execution.get('duration_ms', 0)} ms"
                         + (" · 超时已终止" if execution.get("timed_out") else "")
+                    ),
+                    logic=(
+                        "LocalSubprocessRunner 在临时目录创建 in/ 与 out/，清空环境变量，"
+                        "只注入 PATH/TMPDIR/AGENT_*；subprocess 独立进程组，"
+                        "超时 kill 整个进程组；stdout/stderr 截断后返回。"
+                    ),
+                    code=(
+                        "cmd = [python|bash|node, entrypoint, question]\n"
+                        "proc = subprocess.Popen(cmd, cwd=input_dir, env=minimal_env,\n"
+                        "                        start_new_session=True)\n"
+                        "out, err = proc.communicate(timeout=agent.timeout)\n"
+                        "artifacts = artifact_store.persist(input_dir, out_dir)"
                     ),
                     kind="tool",
                     status=status,

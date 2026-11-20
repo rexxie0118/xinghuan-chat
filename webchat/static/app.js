@@ -1487,6 +1487,24 @@
       detail.className = "trace-detail";
       detail.textContent = step.detail || "";
       text.append(title, detail);
+      if (step.logic || step.code) {
+        const logic = document.createElement("details");
+        logic.className = "trace-logic";
+        const cap = document.createElement("summary");
+        cap.textContent = "代码逻辑";
+        logic.append(cap);
+        if (step.logic) {
+          const p = document.createElement("p");
+          p.textContent = step.logic;
+          logic.append(p);
+        }
+        if (step.code) {
+          const pre = document.createElement("pre");
+          pre.textContent = step.code;
+          logic.append(pre);
+        }
+        text.append(logic);
+      }
       row.append(dot, text);
       body.append(row);
     }
