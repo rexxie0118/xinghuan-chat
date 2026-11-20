@@ -24,6 +24,7 @@ import httpx
 from .agent_defs import ImportedAgent, cited_indices
 from .config import Settings
 from .knowledge import KnowledgeService
+from .runtime.hooks import HookBus, HookContext
 from .sandbox import RunRequest, SandboxRunner
 from .util import new_id
 
@@ -94,6 +95,16 @@ class AgentRunner:
     def __init__(self, settings: Settings, sandbox: SandboxRunner) -> None:
         self.settings = settings
         self.sandbox = sandbox
+        self.hooks: HookBus | None = None
+        self.hook_context: HookContext | None = None
+
+    def attach_hooks(self, hooks: HookBus, context: HookContext) -> None:
+        self.hooks = hooks
+        self.hook_context = context
+
+    def _emit(self, event: str, payload: dict[str, Any]) -> None:
+        if self.hooks is not None and self.hook_context is not None:
+            self.hooks.emit(event, payload, self.hook_context)
 
     # ------------------------------------------------------------------ entry
 
@@ -120,6 +131,10 @@ class AgentRunner:
         retrieval_query = self._retrieval_query(question, history)
         status("检索知识库", "向量 + 全文 + 图谱三路召回，RRF 融合")
         started = time.perf_counter()
+        self._emit(
+            "retrieval_start",
+            {"query": retrieval_query, "question": question, "history": history},
+        )
         try:
             result = kb.retrieve(retrieval_query)
         except Exception as exc:  # noqa: BLE001
@@ -134,6 +149,14 @@ class AgentRunner:
                 mode=mode,
             )
         retrieval_ms = int((time.perf_counter() - started) * 1000)
+        self._emit(
+            "retrieval_end",
+            {
+                "query": retrieval_query,
+                "result": result,
+                "duration_ms": retrieval_ms,
+            },
+        )
 
         base_trace = [
             _step(
@@ -267,6 +290,10 @@ class AgentRunner:
                 "warnings": [f"{type(exc).__name__}: {exc}"],
             }
         answer_ms = int((time.perf_counter() - started) * 1000)
+        self._emit(
+            "answer_end",
+            {"answer": answer_dict, "duration_ms": answer_ms},
+        )
 
         # Chat mode should still be able to answer general questions. The
         # knowledge-base prompt is intentionally strict, so if it refuses or
@@ -550,6 +577,17 @@ class AgentRunner:
                     )
                 )
         run_id = new_id("run")
+        self._emit(
+            "tool_call",
+            {
+                "agent_id": agent.id,
+                "agent_name": agent.name,
+                "entrypoint": agent.entrypoint,
+                "runtime": agent.runtime,
+                "run_id": run_id,
+                "pipeline": pipeline,
+            },
+        )
         execution = self.sandbox.run(
             RunRequest(
                 run_id=run_id,
@@ -570,6 +608,16 @@ class AgentRunner:
                 allow_exec=self.settings.allow_script_exec,
             )
         ).to_dict()
+        self._emit(
+            "tool_result",
+            {
+                "agent_id": agent.id,
+                "run_id": run_id,
+                "execution": execution,
+                "ok": bool(execution.get("ran"))
+                and execution.get("exit_code") in (0, None),
+            },
+        )
         warnings: list[str] = []
         answer_dict: dict[str, Any] | None = None
         used_script = False

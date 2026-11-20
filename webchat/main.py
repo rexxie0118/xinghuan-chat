@@ -36,6 +36,7 @@ from .db import connect, init_db
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
 from .tools import ToolError, build_tool_registry
+from .runtime import AgentKernel
 from .security import (
     COOKIE_NAME,
     hash_password,
@@ -197,6 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     registry = KnowledgeRegistry(settings)
     sandbox = build_sandbox_runner(settings)
     runner = AgentRunner(settings, sandbox)
+    kernel = AgentKernel(settings, runner)
     tools = build_tool_registry(settings)
 
     conn = connect(settings.db_path)
@@ -221,6 +223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.kb = registry.get(registry.infos[0].id)
     app.state.sandbox = sandbox
     app.state.runner = runner
+    app.state.kernel = kernel
     app.state.tools = tools
 
     @app.middleware("http")
@@ -869,7 +872,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     emit("status", {"title": title_text, "detail": detail})
 
                 try:
-                    result = runner.run(
+                    result = kernel.run(
                         question=content,
                         mode=payload.mode,
                         user=user,

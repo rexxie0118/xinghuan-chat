@@ -619,6 +619,31 @@ agents(id, user_id, name, description, markdown, entrypoint,
 
 ---
 
+### AgentKernel 与插件扩展点
+
+`webchat/runtime/` 是 P0 的 kernel 层，不重写现有 RAG / ImportedAgent：
+
+```text
+AgentKernel
+  ├── HookBus          同步生命周期事件，hook 异常隔离
+  ├── retrieval_start / retrieval_end
+  ├── answer_start / answer_end
+  ├── tool_call / tool_result
+  └── agent_start / agent_end / agent_error
+```
+
+当前插件是**可信内部插件**，在 Web 进程内运行：
+
+```python
+class MyPlugin:
+    name = "my-plugin"
+
+    def setup(self, ctx):
+        ctx.on("retrieval_end", lambda event, payload, _ctx: ...)
+```
+
+不把租户上传的 Python 插件加载进 Web 进程；外部工具走 MCP，不可信 Agent 走 Apple Container。
+
 ## 9. 配置
 
 | 环境变量 | 默认 | 说明 |
@@ -659,9 +684,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期。
 
-> 当前共 23 项测试，全部通过。
+> 当前共 25 项测试，全部通过。
 
 ---
 
@@ -675,6 +700,7 @@ webchat/
 ├── security.py             scrypt、Session Token
 ├── knowledge.py            kb 引擎适配、多知识库注册表、检索/图谱/实体
 ├── agent.py                本地 / 外部 / 导入 Agent 编排
+├── runtime/                AgentKernel + hook bus + trusted plugin seam
 ├── tools.py                MCP stdio/HTTP client + Tool Registry
 ├── sandbox/apple.py        Apple Container 一次性执行 runner
 ├── agent_defs.py           Agent / Skill 导入、解析、存储
