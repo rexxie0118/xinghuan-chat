@@ -2960,18 +2960,33 @@
     $("#clear-conversation-cta").addEventListener("click", clearCurrentConversation);
 
     const input = $("#message-input");
+    let compositionEndedAt = 0;
+    input.addEventListener("compositionend", () => {
+      compositionEndedAt = performance.now();
+    });
     input.addEventListener("input", () => {
       resizeInput();
       updateComposer();
     });
     input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      if (event.key !== "Enter") return;
+      // macOS/Windows IMEs can report isComposing=false for the Enter that
+      // confirms a candidate; keyCode 229 and the recent compositionend guard
+      // keep that Enter inside the IME instead of submitting the message.
+      const justFinishedComposition = performance.now() - compositionEndedAt < 120;
+      if (event.isComposing || event.keyCode === 229 || justFinishedComposition) {
+        return;
+      }
+      if (!event.shiftKey) {
         event.preventDefault();
         submitMessage();
       }
     });
     $("#composer").addEventListener("submit", (event) => {
       event.preventDefault();
+      // A form submit can also be triggered by the Enter that confirms an IME
+      // candidate in some browsers. Keep that key inside the IME.
+      if (performance.now() - compositionEndedAt < 120) return;
       submitMessage();
     });
     $("#send-btn").addEventListener("click", (event) => {
