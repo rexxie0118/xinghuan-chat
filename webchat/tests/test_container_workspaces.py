@@ -73,6 +73,58 @@ class ContainerWorkspaceTest(unittest.TestCase):
         self.assertEqual(len(mapping["workspaces"]), 1)
         self.assertEqual(mapping["workspaces"][0]["conversation_id"], self.conv["id"])
 
+    def test_checkpoint_and_restore(self):
+        self.service.ensure_workspace(self.user["id"], self.conv["id"])
+        self.service.save_checkpoint(
+            self.user["id"],
+            self.conv["id"],
+            last_message_id="msg_1",
+            last_run_id="run_1",
+            state={"answer_mode": "llm", "trace_steps": 3},
+        )
+        checkpoint = self.service.get_checkpoint(self.user["id"], self.conv["id"])
+        self.assertEqual(checkpoint["last_message_id"], "msg_1")
+        self.assertEqual(checkpoint["state"]["answer_mode"], "llm")
+        restored = self.service.restore(self.user["id"], self.conv["id"])
+        self.assertEqual(restored["checkpoint"]["last_run_id"], "run_1")
+
+    def test_idle_reaper_stops_and_deletes_then_purges(self):
+        from datetime import datetime, timedelta, timezone
+        from webchat.db import connect
+
+        self.service.ensure_user(self.user["id"])
+        key = runtime_key(self.user["id"])
+        old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        conn = connect(self.db)
+        try:
+            with conn:
+                conn.execute("UPDATE user_runtimes SET last_active_at=? WHERE user_id=?", (old, self.user["id"]))
+        finally:
+            conn.close()
+        summary = self.service.reap_idle(
+            stop_after_seconds=60,
+            delete_after_seconds=10800,
+            purge_after_seconds=86400,
+        )
+        self.assertEqual(summary["stopped"], 1)
+        self.assertEqual(self.service.get(self.user["id"])["runtime"]["state"], "stopped")
+
+        very_old = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        conn = connect(self.db)
+        try:
+            with conn:
+                conn.execute("UPDATE user_runtimes SET last_active_at=? WHERE user_id=?", (very_old, self.user["id"]))
+        finally:
+            conn.close()
+        summary = self.service.reap_idle(
+            stop_after_seconds=60,
+            delete_after_seconds=3600,
+            purge_after_seconds=86400,
+        )
+        self.assertEqual(summary["purged"], 1)
+        self.assertIsNone(self.service.get(self.user["id"]))
+        self.assertIn(("delete", key), self.runtime.calls)
+
     def test_stop_and_delete(self):
         self.service.ensure_user(self.user["id"])
         stopped = self.service.stop(self.user["id"])

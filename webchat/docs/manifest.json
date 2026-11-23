@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-04",
+      "title": "空闲回收与 checkpoint 恢复",
+      "date": "2026-11-23",
+      "summary": "加入 RuntimeReaper 和 container_checkpoints，支持 idle stop/delete/purge 与 restore API。",
+      "record": "iterations/2026-11-23-04.html",
+      "diagrams": [
+        "architecture/2026-11-23-runtime-reaper.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-03",
       "title": "per-user 容器与 workspace 映射",
       "date": "2026-11-23",
@@ -78,6 +88,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-user-workspace-mapping.svg",
       "note": "per-user runtime 与 per-conversation workspace 已持久化；执行迁移、idle reaper 仍待做。"
+    },
+    {
+      "id": "2026-11-23-v5",
+      "label": "v5 · Idle Reaper + Checkpoint",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-runtime-reaper.svg",
+      "note": "空闲回收与逻辑 checkpoint 恢复已落地；进程内存快照仍不支持。"
     }
   ]
 }

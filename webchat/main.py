@@ -36,7 +36,7 @@ from .db import connect, init_db
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
 from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
-from .container_workspaces import ContainerWorkspaceService
+from .container_workspaces import ContainerWorkspaceService, RuntimeReaper
 from .tools import ToolError, build_tool_registry
 from .runtime import AgentKernel
 from .security import (
@@ -104,6 +104,10 @@ class ToolCallIn(BaseModel):
 
 class AgentTestIn(BaseModel):
     question: str = Field(default="测试执行：请输出 OK", min_length=1, max_length=2000)
+
+
+class RuntimeRestoreIn(BaseModel):
+    conversation_id: str = Field(min_length=1, max_length=80)
 
 
 class RuntimeEnsureIn(BaseModel):
@@ -220,9 +224,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         LOG.info("星环 Chat ready at %s", settings.db_path)
+        reaper_task = None
+        reaper_stop = None
+        if settings.sandbox.startswith("apple") and settings.runtime_idle_enabled:
+            reaper_stop = asyncio.Event()
+            reaper = RuntimeReaper(
+                workspace_service,
+                interval_seconds=settings.runtime_reap_interval,
+                stop_after_seconds=settings.runtime_idle_stop_seconds,
+                delete_after_seconds=settings.runtime_idle_delete_seconds,
+                purge_after_seconds=settings.runtime_idle_purge_seconds,
+            )
+            reaper_task = asyncio.create_task(reaper.run(reaper_stop))
+            LOG.info(
+                "runtime reaper started: stop=%ss delete=%ss purge=%ss",
+                settings.runtime_idle_stop_seconds,
+                settings.runtime_idle_delete_seconds,
+                settings.runtime_idle_purge_seconds,
+            )
         try:
             yield
         finally:
+            if reaper_stop is not None:
+                reaper_stop.set()
+            if reaper_task is not None:
+                reaper_task.cancel()
+                try:
+                    await reaper_task
+                except (asyncio.CancelledError, Exception):
+                    pass
             tools.close()
 
     app = FastAPI(
@@ -433,6 +463,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ContainerRuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"mapping": mapping, "state": workspace_service.get(user["id"])}
+
+    @app.post("/api/runtimes/me/restore")
+    def restore_my_runtime(
+        payload: RuntimeRestoreIn, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        db = connect(settings.db_path)
+        try:
+            conversation = repo.get_conversation(
+                db, conversation_id=payload.conversation_id, user_id=user["id"]
+            )
+        finally:
+            db.close()
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        try:
+            restored = workspace_service.restore(user["id"], payload.conversation_id)
+        except ContainerRuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return restored
 
     @app.post("/api/runtimes/me/stop")
     def stop_my_runtime(user: dict[str, Any] = User) -> dict[str, Any]:
@@ -908,7 +957,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     raise HTTPException(status_code=404, detail="Agent 不存在或不属于你")
             if (
                 imported_agent is not None
-                and settings.sandbox == "apple-container"
+                and settings.sandbox.startswith("apple")
                 and settings.runtime_auto_ensure
             ):
                 try:
@@ -982,6 +1031,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         fresh = repo.get_conversation(
                             wdb, conversation_id=conversation_id, user_id=user["id"]
                         )
+                        if imported_agent is not None and settings.sandbox.startswith("apple"):
+                            try:
+                                execution = meta.get("execution") or {}
+                                workspace_service.save_checkpoint(
+                                    user["id"],
+                                    conversation_id,
+                                    last_message_id=message["id"],
+                                    last_run_id=str(execution.get("run_id") or ""),
+                                    state={
+                                        "answer_mode": meta.get("answer_mode", ""),
+                                        "agent_name": meta.get("agent_name", ""),
+                                        "artifacts": execution.get("artifacts") or [],
+                                        "trace_steps": len(meta.get("trace") or []),
+                                    },
+                                )
+                                workspace_service.touch_workspace(user["id"], conversation_id)
+                            except Exception as exc:  # noqa: BLE001
+                                LOG.warning("checkpoint save failed: %s", exc)
                     finally:
                         wdb.close()
                     emit(

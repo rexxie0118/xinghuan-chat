@@ -1,0 +1,119 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-23-04</div>
+    <h1>空闲回收与 checkpoint 恢复</h1>
+    <p class="lede">
+      加入 RuntimeReaper：按 last_active_at 对用户容器 stop / delete / purge；
+      同时把最近消息、run、产物和轨迹摘要写入 container_checkpoints，支持逻辑恢复。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：33 项通过</span>
+      <span>架构：v5</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>本迭代完成</h2>
+    <div class="change-grid">
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Idle Reaper</h3>
+        <p>stop 30m / delete 7d / purge 30d，全部可配置；容器删除后保留 named volume。</p>
+        <code>RuntimeReaper</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Checkpoint</h3>
+        <p>记录 last_message_id、last_run_id、answer_mode、artifacts 和 trace 摘要。</p>
+        <code>container_checkpoints</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Restore API</h3>
+        <p>POST /api/runtimes/me/restore：ensure 容器/workspace 后加载 checkpoint。</p>
+        <code>/api/runtimes/me/restore</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>默认策略</h2>
+    <pre class="record-pre">WEBCHAT_RUNTIME_IDLE_ENABLED=true
+WEBCHAT_RUNTIME_IDLE_STOP_SECONDS=1800
+WEBCHAT_RUNTIME_IDLE_DELETE_SECONDS=604800
+WEBCHAT_RUNTIME_IDLE_PURGE_SECONDS=2592000
+WEBCHAT_RUNTIME_REAP_INTERVAL=60</pre>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">restore API
+→ ensure xh-rt-76607e6e89836521 · running
+→ workspace /workspace/sessions/conv_0093...
+→ checkpoint: null（首次）
+
+idle reaper 单测
+→ 2h 空闲: stopped
+→ 10d 空闲: purged
+→ container + volume 清理</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>checkpoint 是逻辑状态，不是进程内存快照；恢复后从消息和 checkpoint 重建。</li>
+      <li>Agent 脚本仍走一次性 runner，尚未真正在常驻容器中运行。</li>
+      <li>in-flight tool call 的幂等重放需要下一步的失败恢复一起做。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-23-runtime-reaper.svg" alt="v5 idle reaper and checkpoint" />
+      <figcaption>v5：last_active_at 驱动 stop/delete/purge；checkpoint 支持逻辑恢复。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">8 项完成，18 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>完成内部 Plugin API 与 manifest</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>实现真正的 Tool Loop</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>把失败恢复、Tool Loop 和常驻容器内的 Agent 执行串起来；真正的幂等重放仍需工具级 idempotency key。</p>
+  </section>
+</article>

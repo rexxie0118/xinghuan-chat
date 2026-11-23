@@ -392,9 +392,32 @@ API：
 ```text
 GET    /api/runtimes/me
 POST   /api/runtimes/me/ensure          {conversation_id?}
+POST   /api/runtimes/me/restore         {conversation_id}
 POST   /api/runtimes/me/stop
 DELETE /api/runtimes/me?delete_volume=false
 ```
+
+### 空闲回收与 checkpoint
+
+后台 `RuntimeReaper` 在 Apple sandbox 下运行，默认：
+
+```text
+30 分钟无活动 → stop
+7 天无活动   → delete container，保留 volume
+30 天无活动  → purge volume + 映射
+```
+
+可通过环境变量调整：
+
+```dotenv
+WEBCHAT_RUNTIME_IDLE_ENABLED=true
+WEBCHAT_RUNTIME_IDLE_STOP_SECONDS=1800
+WEBCHAT_RUNTIME_IDLE_DELETE_SECONDS=604800
+WEBCHAT_RUNTIME_IDLE_PURGE_SECONDS=2592000
+WEBCHAT_RUNTIME_REAP_INTERVAL=60
+```
+
+checkpoint 存在 `container_checkpoints`，记录最近消息、run、产物和轨迹摘要；恢复时先 ensure 容器/workspace，再加载 checkpoint。
 
 Apple sandbox 下，首次使用导入 Agent 会自动 ensure 用户容器和会话 workspace。
 
@@ -744,9 +767,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时与 workspace 映射。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint 与 idle reaper。
 
-> 当前共 31 项测试，全部通过。
+> 当前共 33 项测试，全部通过。
 
 ---
 
