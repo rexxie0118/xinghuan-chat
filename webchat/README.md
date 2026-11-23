@@ -421,6 +421,24 @@ checkpoint 存在 `container_checkpoints`，记录最近消息、run、产物和
 
 Apple sandbox 下，首次使用导入 Agent 会自动 ensure 用户容器和会话 workspace。
 
+### 失败策略与取消
+
+`webchat/runtime/failures.py` 提供：
+
+- `FailureClass`：transient / rate_limit / timeout / auth / permission / input / upstream / cancelled
+- `RetryPolicy`：只重试安全类别，支持指数退避和 `Retry-After`
+- `CircuitBreaker`：外部 Agent 连续失败后打开，半开探测
+
+外部 Agent 调用现在会重试 transient/timeout/429，并把失败类别写入轨迹；脚本失败会写入 `execution.failure`。
+
+取消：
+
+```http
+POST /api/conversations/{id}/cancel
+```
+
+输入框生成中会显示「停止」按钮；取消后保存一条 `answer_mode=cancelled` 的消息。取消是协作式检查，正在进行的单次 LLM/脚本调用不会被强行中断。
+
 ### 执行边界
 
 这不是强沙箱，只是 Demo 级隔离：
@@ -767,9 +785,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint 与 idle reaper。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消。
 
-> 当前共 33 项测试，全部通过。
+> 当前共 38 项测试，全部通过。
 
 ---
 

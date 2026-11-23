@@ -38,6 +38,8 @@ from .sandbox import build_sandbox_runner
 from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
 from .container_workspaces import ContainerWorkspaceService, RuntimeReaper
 from .tools import ToolError, build_tool_registry
+from .runtime.cancel import ActiveRuns
+from .runtime.failures import RunCancelled, classify_exception
 from .runtime import AgentKernel
 from .security import (
     COOKIE_NAME,
@@ -209,6 +211,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     sandbox = build_sandbox_runner(settings)
     container_runtime = AppleContainerRuntime(settings)
     workspace_service = ContainerWorkspaceService(settings, container_runtime)
+    active_runs = ActiveRuns()
     runner = AgentRunner(settings, sandbox)
     kernel = AgentKernel(settings, runner)
     tools = build_tool_registry(settings)
@@ -268,6 +271,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.sandbox = sandbox
     app.state.container_runtime = container_runtime
     app.state.workspace_service = workspace_service
+    app.state.active_runs = active_runs
     app.state.runner = runner
     app.state.kernel = kernel
     app.state.tools = tools
@@ -930,6 +934,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             db.close()
 
+    @app.post("/api/conversations/{conversation_id}/cancel")
+    def cancel_conversation(
+        conversation_id: str, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        db = connect(settings.db_path)
+        try:
+            conversation = repo.get_conversation(
+                db, conversation_id=conversation_id, user_id=user["id"]
+            )
+        finally:
+            db.close()
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        return {"cancelled": active_runs.cancel(conversation_id)}
+
     # ---------------------------------------------------------- chat (SSE)
 
     @app.post("/api/conversations/{conversation_id}/messages")
@@ -987,6 +1006,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async def event_stream() -> AsyncIterator[str]:
             queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
             loop = asyncio.get_running_loop()
+            cancel_token = active_runs.begin(conversation_id)
 
             def emit(event: str, data: Any) -> None:
                 loop.call_soon_threadsafe(queue.put_nowait, (event, data))
@@ -1005,6 +1025,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         kb=service,
                         imported_agent=imported_agent,
                         on_status=status,
+                        cancel_token=cancel_token,
                     )
                     wdb = connect(settings.db_path)
                     try:
@@ -1059,8 +1080,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             "user_message": user_message,
                         },
                     )
+                except RunCancelled:
+                    try:
+                        cdb = connect(settings.db_path)
+                        try:
+                            message = repo.add_message(
+                                cdb,
+                                conversation_id=conversation_id,
+                                user_id=user["id"],
+                                role="assistant",
+                                content="本次生成已取消。",
+                                meta={
+                                    "mode": payload.mode,
+                                    "engine": "local",
+                                    "answer_mode": "cancelled",
+                                    "failure": {"kind": "cancelled", "retryable": False},
+                                    "trace": [],
+                                    "warnings": ["本次生成已取消"],
+                                },
+                            )
+                        finally:
+                            cdb.close()
+                        emit("error", {"message": message, "detail": "本次生成已取消"})
+                    except Exception:  # noqa: BLE001
+                        emit("error", {"detail": "本次生成已取消"})
                 except Exception as exc:  # noqa: BLE001 - surface a readable error
-                    LOG.exception("chat failed")
+                    failure = classify_exception(exc)
+                    LOG.exception("chat failed (%s)", failure.kind.value)
                     try:
                         edb = connect(settings.db_path)
                         try:
@@ -1073,9 +1119,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 meta={
                                     "mode": payload.mode,
                                     "engine": "local",
+                                    "answer_mode": "error",
                                     "error": f"{type(exc).__name__}: {exc}",
+                                    "failure": failure.to_dict(),
                                     "trace": [],
-                                    "warnings": ["生成失败"],
+                                    "warnings": [f"生成失败（{failure.kind.value}）"],
                                 },
                             )
                         finally:
@@ -1084,6 +1132,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     except Exception:  # noqa: BLE001
                         emit("error", {"detail": "回答生成失败"})
                 finally:
+                    active_runs.finish(conversation_id, cancel_token)
                     emit("__end__", None)
 
             task = asyncio.create_task(asyncio.to_thread(work))

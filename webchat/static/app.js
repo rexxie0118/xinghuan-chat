@@ -1848,6 +1848,12 @@
     const input = $("#message-input");
     $("#send-btn").disabled = state.sending || !input.value.trim();
     $("#send-btn").classList.toggle("sending", state.sending);
+    const cancelBtn = $("#cancel-btn");
+    if (cancelBtn) {
+      cancelBtn.hidden = !state.sending;
+      cancelBtn.disabled = false;
+      cancelBtn.textContent = "停止";
+    }
     $("#composer-hint").textContent = state.sending
       ? "正在生成回答…"
       : state.mode === "agent"
@@ -3030,6 +3036,22 @@
     $("#send-btn").addEventListener("click", (event) => {
       event.preventDefault();
       submitMessage();
+    });
+    $("#cancel-btn").addEventListener("click", async () => {
+      if (!state.sending || !state.activeId) return;
+      const btn = $("#cancel-btn");
+      btn.disabled = true;
+      btn.textContent = "取消中…";
+      try {
+        const data = await api(`/api/conversations/${encodeURIComponent(state.activeId)}/cancel`, {
+          method: "POST",
+        });
+        toast(data.cancelled ? "已请求取消" : "当前没有运行中的任务");
+      } catch (err) {
+        toast(err.message, "error");
+        btn.disabled = false;
+        btn.textContent = "停止";
+      }
     });
 
     $$(".panel-tab").forEach((tab) =>

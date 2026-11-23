@@ -72,6 +72,15 @@ class ApiTest(unittest.TestCase):
             bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
             self.assertEqual(bad.status_code, 400)
 
+    def test_cancel_endpoint_without_active_run(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            conv = client.post("/api/conversations", json={"mode": "rag"}).json()["conversation"]
+            resp = client.post(f"/api/conversations/{conv['id']}/cancel")
+            self.assertEqual(resp.status_code, 200)
+            self.assertFalse(resp.json()["cancelled"])
+            client.delete(f"/api/conversations/{conv['id']}")
+
     def test_runtime_mapping_endpoint_starts_empty(self):
         with TestClient(self.app) as client:
             self.login(client)

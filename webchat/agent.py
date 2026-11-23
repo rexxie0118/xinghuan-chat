@@ -24,6 +24,15 @@ import httpx
 from .agent_defs import ImportedAgent, cited_indices
 from .config import Settings
 from .knowledge import KnowledgeService
+from .runtime.cancel import CancellationToken
+from .runtime.failures import (
+    CircuitBreaker,
+    FailureClass,
+    RetryPolicy,
+    RunCancelled,
+    classify_exception,
+    classify_execution,
+)
 from .runtime.hooks import HookBus, HookContext
 from .sandbox import RunRequest, SandboxRunner
 from .util import new_id
@@ -97,6 +106,7 @@ class AgentRunner:
         self.sandbox = sandbox
         self.hooks: HookBus | None = None
         self.hook_context: HookContext | None = None
+        self.external_breaker = CircuitBreaker("external-agent", failure_threshold=3, reset_timeout=30)
 
     def attach_hooks(self, hooks: HookBus, context: HookContext) -> None:
         self.hooks = hooks
@@ -105,6 +115,11 @@ class AgentRunner:
     def _emit(self, event: str, payload: dict[str, Any]) -> None:
         if self.hooks is not None and self.hook_context is not None:
             self.hooks.emit(event, payload, self.hook_context)
+
+    @staticmethod
+    def _check_cancel(token: CancellationToken | None) -> None:
+        if token is not None:
+            token.check()
 
     # ------------------------------------------------------------------ entry
 
@@ -119,8 +134,10 @@ class AgentRunner:
         kb: KnowledgeService,
         imported_agent: ImportedAgent | None = None,
         on_status: StatusFn | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> AgentResult:
         mode = "rag" if mode == "rag" else "agent"
+        self._check_cancel(cancel_token)
         status = on_status or (lambda _title, _detail: None)
 
         smalltalk = self._smalltalk(kb, question, mode) if imported_agent is None else None
@@ -149,6 +166,7 @@ class AgentRunner:
                 mode=mode,
             )
         retrieval_ms = int((time.perf_counter() - started) * 1000)
+        self._check_cancel(cancel_token)
         self._emit(
             "retrieval_end",
             {
@@ -257,9 +275,11 @@ class AgentRunner:
                 base_trace=base_trace,
                 kb=kb,
                 history=history,
+                cancel_token=cancel_token,
             )
 
         if self.settings.agent_enabled:
+            self._check_cancel(cancel_token)
             status("调用外部 Agent", "正在请求另一个仓库里的 Agent 服务")
             external = self._run_external(
                 question=question,
@@ -274,6 +294,7 @@ class AgentRunner:
             if external is not None:
                 return external
 
+        self._check_cancel(cancel_token)
         status("生成回答", "基于证据生成引用式回答")
         started = time.perf_counter()
         try:
@@ -290,6 +311,7 @@ class AgentRunner:
                 "warnings": [f"{type(exc).__name__}: {exc}"],
             }
         answer_ms = int((time.perf_counter() - started) * 1000)
+        self._check_cancel(cancel_token)
         self._emit(
             "answer_end",
             {"answer": answer_dict, "duration_ms": answer_ms},
@@ -454,7 +476,9 @@ class AgentRunner:
         base_trace: list[dict[str, Any]],
         kb: KnowledgeService,
         history: list[dict[str, str]],
+        cancel_token: CancellationToken | None = None,
     ) -> AgentResult:
+        self._check_cancel(cancel_token)
         trace = list(base_trace)
         kind_label = "Skill" if agent.kind == "skill" else "Agent"
         trace.append(
@@ -576,6 +600,7 @@ class AgentRunner:
                         ),
                     )
                 )
+        self._check_cancel(cancel_token)
         run_id = new_id("run")
         self._emit(
             "tool_call",
@@ -608,6 +633,10 @@ class AgentRunner:
                 allow_exec=self.settings.allow_script_exec,
             )
         ).to_dict()
+        self._check_cancel(cancel_token)
+        failure = classify_execution(execution)
+        if failure is not None:
+            execution["failure"] = failure.to_dict()
         self._emit(
             "tool_result",
             {
@@ -1042,7 +1071,8 @@ class AgentRunner:
         if self.settings.agent_token:
             headers["Authorization"] = f"Bearer {self.settings.agent_token}"
         started = time.perf_counter()
-        try:
+
+        def request() -> dict[str, Any]:
             resp = httpx.post(
                 self.settings.agent_url.rstrip("/") + "/chat",
                 json=body,
@@ -1050,14 +1080,20 @@ class AgentRunner:
                 timeout=self.settings.agent_timeout,
             )
             resp.raise_for_status()
-            data = resp.json()
-            answer = str(data.get("answer") or "").strip()
-            if not answer:
+            payload = resp.json()
+            if not str(payload.get("answer") or "").strip():
                 raise ValueError("Agent 返回了空 answer")
+            return payload
+
+        try:
+            data = RetryPolicy(attempts=2, base_delay=0.3, max_delay=2).run(
+                request, breaker=self.external_breaker
+            )
         except Exception as exc:  # noqa: BLE001 - fall back, never break chat
-            LOG.warning("external agent failed: %s", exc)
+            failure = classify_exception(exc)
+            LOG.warning("external agent failed (%s): %s", failure.kind.value, exc)
             local = self._trace_warning(
-                f"外部 Agent 不可用（{type(exc).__name__}），已自动回退到本地 RAG"
+                f"外部 Agent 不可用（{failure.kind.value}），已自动回退到本地 RAG"
             )
             base_trace.append(local)
             return None

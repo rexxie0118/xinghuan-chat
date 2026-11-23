@@ -1343,6 +1343,14 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
 }
 .composer-mode .icon { width: 10px; height: 10px; }
 .composer-hint { font-size: 9.5px; color: var(--faint); }
+.cancel-btn {
+  height: 30px; padding: 0 10px; margin-right: 5px;
+  border: 1px solid rgba(241,169,180,.3); border-radius: 7px;
+  color: var(--rose); background: rgba(241,169,180,.06);
+  font-size: 9.5px;
+}
+.cancel-btn:hover { background: rgba(241,169,180,.12); border-color: rgba(241,169,180,.5); }
+.cancel-btn:disabled { opacity: .5; cursor: wait; }
 .send-btn {
   margin-left: auto;
   width: 33px; height: 33px; border-radius: 9px;

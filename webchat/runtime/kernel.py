@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from .failures import RunCancelled
 from .hooks import HookBus, HookContext, RuntimePlugin
 
 LOG = logging.getLogger("webchat.runtime")
@@ -40,6 +41,13 @@ class AgentKernel:
         )
         try:
             result = self.runner.run(**kwargs)
+        except RunCancelled as exc:
+            self.hooks.emit(
+                "agent_cancelled",
+                {"message": str(exc) or "本次生成已取消"},
+                self.context,
+            )
+            raise
         except Exception as exc:
             self.hooks.emit(
                 "agent_error",

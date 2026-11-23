@@ -1,0 +1,108 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-23-05</div>
+    <h1>失败策略、重试、熔断与取消</h1>
+    <p class="lede">
+      给运行时补上失败分类、有限重试、外部 Agent 熔断和协作式取消；
+      失败类别写入轨迹和 meta，取消通过 conversation 级 ActiveRuns 触发。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：38 项通过</span>
+      <span>架构：v6</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>本迭代完成</h2>
+    <div class="change-grid">
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>FailureClass</h3>
+        <p>transient / rate_limit / timeout / auth / permission / input / upstream / cancelled。</p>
+        <code>runtime/failures.py</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Retry + Breaker</h3>
+        <p>外部 Agent 只重试安全类别，带退避和 Retry-After；连续失败打开 circuit。</p>
+        <code>RetryPolicy / CircuitBreaker</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Cancel</h3>
+        <p>conversation 级 token；输入框生成中显示「停止」，取消后保存 cancelled 消息。</p>
+        <code>ActiveRuns / POST cancel</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">classify timeout → FailureClass.TIMEOUT
+classify rate limit → FailureClass.RATE_LIMIT
+transient retry: 3 attempts then success
+invalid input: 1 attempt, no retry
+breaker: 2 transient failures → open
+cancel endpoint: cancelled=false when idle
+38 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>取消是协作式的：LLM 正在进行的 HTTP 调用不会被强制中断，只在步骤边界生效。</li>
+      <li>脚本失败会记录 failure，但不会自动重放，避免副作用重复。</li>
+      <li>未完成的工具调用还没有 idempotency key；下一步与 Tool Loop 一起做。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-23-failure-policy.svg" alt="v6 failure policy" />
+      <figcaption>v6：失败分类、有限重试、外部 Agent 熔断、conversation 级取消。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">9 项完成，17 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>完成内部 Plugin API 与 manifest</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>实现真正的 Tool Loop</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>真正需要的是 Tool Loop + idempotency：失败恢复必须知道哪些工具已经执行、哪些可以安全重放。</p>
+  </section>
+</article>

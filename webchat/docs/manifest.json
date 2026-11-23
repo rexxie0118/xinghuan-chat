@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-05",
+      "title": "失败策略、重试、熔断与取消",
+      "date": "2026-11-23",
+      "summary": "加入 FailureClass、RetryPolicy、CircuitBreaker、ActiveRuns 取消和 UI 停止按钮。",
+      "record": "iterations/2026-11-23-05.html",
+      "diagrams": [
+        "architecture/2026-11-23-failure-policy.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-04",
       "title": "空闲回收与 checkpoint 恢复",
       "date": "2026-11-23",
@@ -95,6 +105,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-runtime-reaper.svg",
       "note": "空闲回收与逻辑 checkpoint 恢复已落地；进程内存快照仍不支持。"
+    },
+    {
+      "id": "2026-11-23-v6",
+      "label": "v6 · Failure Policy + Cancel",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-failure-policy.svg",
+      "note": "失败分类、有限重试、外部 Agent 熔断、协作式取消已落地。"
     }
   ]
 }
