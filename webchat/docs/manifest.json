@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-07",
+      "title": "真正的 Tool Loop",
+      "date": "2026-11-23",
+      "summary": "Agent 模式接入 LLM tool calling：MCP/plugin tools 自动调用、role=tool 回填、max_steps 和 RAG 回退。",
+      "record": "iterations/2026-11-23-07.html",
+      "diagrams": [
+        "architecture/2026-11-23-tool-loop.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-06",
       "title": "内部 Plugin API 与 manifest",
       "date": "2026-11-23",
@@ -129,6 +139,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-trusted-plugin-host.svg",
       "note": "trusted manifest、hook 订阅和 local plugin tools 已落地；租户插件仍禁止。"
+    },
+    {
+      "id": "2026-11-23-v8",
+      "label": "v8 · LLM Tool Loop",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-tool-loop.svg",
+      "note": "LLM tool_calls → ToolRegistry → role=tool → 继续推理；工具同步执行。"
     }
   ]
 }

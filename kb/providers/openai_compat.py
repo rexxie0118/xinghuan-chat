@@ -144,6 +144,57 @@ class OpenAICompatProvider:
             )
         return (content or "").strip()
 
+    def complete_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        max_tokens: int = 1200,
+        tool_choice: str = "auto",
+    ) -> dict[str, Any]:
+        """OpenAI-compatible function calling (DeepSeek/ARK/OpenAI)."""
+        payload: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": 0,
+            "max_tokens": max_tokens,
+            "tools": tools,
+            "tool_choice": tool_choice,
+        }
+        resp = self._post("/chat/completions", payload)
+        choices = resp.get("choices") or []
+        if not choices:
+            raise ProviderError(f"chat 返回为空：{json.dumps(resp)[:300]}")
+        choice = choices[0]
+        message = choice.get("message") or {}
+        content = message.get("content")
+        if isinstance(content, list):
+            content = "".join(
+                part.get("text", "") for part in content if isinstance(part, dict)
+            )
+        calls = []
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") or {}
+            name = function.get("name")
+            if not name:
+                continue
+            calls.append(
+                {
+                    "id": str(call.get("id") or ""),
+                    "type": "function",
+                    "function": {
+                        "name": str(name),
+                        "arguments": str(function.get("arguments") or "{}"),
+                    },
+                }
+            )
+        return {
+            "content": (content or "").strip(),
+            "tool_calls": calls,
+            "finish_reason": choice.get("finish_reason") or "",
+            "raw": message,
+        }
+
     def health(self) -> tuple[bool, str]:
         try:
             vec = self.embed(["健康检查"])

@@ -529,7 +529,7 @@ HTTP server：
 | `POST /api/tools/{name}/call` | 调用工具，body `{"arguments": {...}}` |
 | `GET /api/meta` | 包含 `tools` 摘要 |
 
-当前只打通了 registry 和调用层，**还没有把工具暴露给 LLM 自动循环**；下一步是 Tool Loop。
+registry、调用层和 LLM Tool Loop 已经打通；有工具时 Agent 模式会自动选择并调用。
 
 安全边界：
 
@@ -720,6 +720,50 @@ webchat/docs/architecture/<date>-*.svg    当前架构图
 
 规则见 [`webchat/docs/README.md`](docs/README.md)。
 
+### Tool Loop
+
+Agent 模式下，如果：
+
+- provider 不是 mock；
+- ToolRegistry 里有 MCP/plugin tools；
+- `WEBCHAT_TOOL_LOOP_ENABLED=true`；
+
+则走真正的 LLM tool calling 循环：
+
+```text
+system + 历史 + 证据 + tools
+  → LLM 返回 tool_calls
+  → ToolRegistry.call
+  → role=tool 结果回填
+  → LLM 继续
+  → 直到回答或 max_steps
+```
+
+配置：
+
+```dotenv
+WEBCHAT_TOOL_LOOP_ENABLED=true
+WEBCHAT_TOOL_MAX_STEPS=4
+```
+
+边界：
+
+- 工具名会转成 OpenAI 函数名 `demo_echo`，再映射回 `demo.echo`；
+- 工具结果截断后回填，避免上下文爆炸；
+- 工具错误会作为 `role=tool` 错误结果回给模型；
+- 达到 max_steps 或 LLM 失败会回退知识库回答；
+- Tool Loop 只用于默认本地 Agent，不覆盖导入 Agent / 外部 Agent。
+
+回答元数据：
+
+```json
+{
+  "answer_mode": "tool_loop",
+  "tool_steps": 1,
+  "tools_used": ["demo.echo"]
+}
+```
+
 ### Trusted Plugin API 与 manifest
 
 当前只支持**可信内部插件**，运行在 Web 进程内。示例：
@@ -828,9 +872,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop。
 
-> 当前共 42 项测试，全部通过。
+> 当前共 43 项测试，全部通过。
 
 ---
 

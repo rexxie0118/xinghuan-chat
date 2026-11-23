@@ -76,6 +76,8 @@ class Settings:
     plugins_enabled: bool = True
     plugins_config: Path | None = None
     plugins_allow_external: bool = False
+    tool_loop_enabled: bool = True
+    tool_max_steps: int = 4
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -126,6 +128,8 @@ class Settings:
                 os.getenv("WEBCHAT_PLUGINS_CONFIG", ROOT / "plugins.json")
             ).expanduser(),
             plugins_allow_external=_env_bool("WEBCHAT_PLUGINS_ALLOW_EXTERNAL", False),
+            tool_loop_enabled=_env_bool("WEBCHAT_TOOL_LOOP_ENABLED", True),
+            tool_max_steps=int(os.getenv("WEBCHAT_TOOL_MAX_STEPS", "4")),
         )
         settings.ensure_dirs()
         return settings

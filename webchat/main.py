@@ -213,9 +213,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     container_runtime = AppleContainerRuntime(settings)
     workspace_service = ContainerWorkspaceService(settings, container_runtime)
     active_runs = ActiveRuns()
-    runner = AgentRunner(settings, sandbox)
-    kernel = AgentKernel(settings, runner)
     tools = build_tool_registry(settings)
+    runner = AgentRunner(settings, sandbox, tools)
+    kernel = AgentKernel(settings, runner)
     plugin_host = load_plugin_host(settings, kernel, tools)
 
     conn = connect(settings.db_path)
