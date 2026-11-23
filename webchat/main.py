@@ -1307,4 +1307,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def index() -> FileResponse:
         return FileResponse(settings.static_dir / "index.html", media_type="text/html")
 
+    @app.middleware("http")
+    async def no_stale_shell(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path in {"/", "/index.html"} or request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+        return response
+
     return app
