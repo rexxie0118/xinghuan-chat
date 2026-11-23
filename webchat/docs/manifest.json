@@ -1,7 +1,17 @@
 {
   "product": "星环 Chat",
-  "updated_at": "2026-11-20",
+  "updated_at": "2026-11-23",
   "iterations": [
+    {
+      "id": "2026-11-23-01",
+      "title": "启用 Apple Container 执行后端",
+      "date": "2026-11-23",
+      "summary": "安装 Apple Container 1.7.1 + Kata 内核，切换 WEBCHAT_SANDBOX=apple-container，完成真机 Agent 执行与产物下载验证。",
+      "record": "iterations/2026-11-23-01.html",
+      "diagrams": [
+        "architecture/2026-11-23-apple-container-enabled.svg"
+      ]
+    },
     {
       "id": "2026-11-20-01",
       "title": "Agent Runtime 基础层：MCP、Apple Container、AgentKernel",
@@ -27,6 +37,13 @@
       "date": "2026-11-20",
       "src": "architecture/2026-11-20-agent-kernel.svg",
       "note": "当前架构。MCP 与 Apple Container 是外部执行边界；AgentKernel 只提供 hook seam。"
+    },
+    {
+      "id": "2026-11-23-v2",
+      "label": "v2 · Apple Container enabled",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-apple-container-enabled.svg",
+      "note": "真机启用 Apple Container 1.7.1；runner 仍是一次性容器，常驻池和 session 恢复尚未实现。"
     }
   ]
 }

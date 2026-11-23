@@ -98,6 +98,8 @@ class AppleContainerRunner:
             "PYTHONIOENCODING=utf-8",
             "--env",
             "NODE_NO_WARNINGS=1",
+            "--progress",
+            "none",
             "-i",
             self.image,
         ]
