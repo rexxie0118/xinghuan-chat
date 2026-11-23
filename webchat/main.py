@@ -341,6 +341,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return kb_service
         raise HTTPException(status_code=403, detail="没有这个知识库的访问权限")
 
+    def memory_payload(user: dict[str, Any]) -> list[dict[str, Any]]:
+        memories = memory_store.list(user["id"])
+        ids = [m.get("source_conversation_id") for m in memories if m.get("source_conversation_id")]
+        titles: dict[str, str] = {}
+        if ids:
+            db = connect(settings.db_path)
+            try:
+                marks = ",".join("?" for _ in ids)
+                rows = db.execute(
+                    f"SELECT id, title FROM conversations WHERE user_id=? AND id IN ({marks})",
+                    (user["id"], *ids),
+                ).fetchall()
+                titles = {row["id"]: row["title"] for row in rows}
+            finally:
+                db.close()
+        for memory in memories:
+            source = memory.get("source_conversation_id") or ""
+            memory["source_conversation_title"] = titles.get(source, "")
+        return memories
+
     # ---------------------------------------------------------------- meta
 
     @app.get("/api/meta")
@@ -454,7 +474,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/memories")
     def list_memories(user: dict[str, Any] = User) -> dict[str, Any]:
-        return {"memories": memory_store.list(user["id"])}
+        return {"memories": memory_payload(user)}
 
     @app.post("/api/memories")
     def add_memory(payload: MemoryIn, user: dict[str, Any] = User) -> dict[str, Any]:
@@ -470,7 +490,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return {"memory": result, "memories": memory_store.list(user["id"])}
+        return {"memory": result, "memories": memory_payload(user)}
 
     @app.delete("/api/memories/{memory_id}")
     def delete_memory(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:

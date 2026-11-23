@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-10",
+      "title": "会话记忆提取与管理 UI",
+      "date": "2026-11-23",
+      "summary": "新增记忆管理弹窗：列表、筛选、手动添加、硬删除，并显示来源会话与命中次数。",
+      "record": "iterations/2026-11-23-10.html",
+      "diagrams": [
+        "architecture/2026-11-23-memory-ui.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-09",
       "title": "用户级长期记忆",
       "date": "2026-11-23",
@@ -180,6 +190,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-user-memory.svg",
       "note": "用户级长期记忆已落地；管理 UI 仍待做。"
+    },
+    {
+      "id": "2026-11-23-v11",
+      "label": "v11 · Memory UI",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-memory-ui.svg",
+      "note": "记忆管理 UI 已落地；自动提取规则未变。"
     }
   ]
 }

@@ -2346,6 +2346,156 @@
     return root;
   }
 
+  function memoryKindLabel(kind) {
+    return { fact: "事实", preference: "偏好", task: "任务" }[kind] || kind;
+  }
+
+  function memoryDate(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return `${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+
+  async function openMemoryManager() {
+    const root = modalShell();
+    const card = document.createElement("div");
+    card.className = "modal-card memory-modal";
+    card.innerHTML = `
+      <div class="memory-head">
+        <div>
+          <p class="eyebrow">YOUR MEMORY</p>
+          <h3>我的长期记忆</h3>
+          <p>只对当前账号可见；进入回答上下文，但不会作为文档引用。</p>
+        </div>
+        <button class="icon-btn memory-close" type="button" aria-label="关闭记忆">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div class="memory-body">
+        <form class="memory-form">
+          <select aria-label="记忆类型">
+            <option value="fact">事实</option>
+            <option value="preference">偏好</option>
+            <option value="task">任务</option>
+          </select>
+          <input maxlength="300" placeholder="例如：回答尽量简洁" aria-label="记忆内容" required>
+          <button class="btn primary" type="submit">记住</button>
+        </form>
+        <div class="memory-filters">
+          <button class="memory-filter active" data-memory-filter="all" type="button">全部</button>
+          <button class="memory-filter" data-memory-filter="fact" type="button">事实</button>
+          <button class="memory-filter" data-memory-filter="preference" type="button">偏好</button>
+          <button class="memory-filter" data-memory-filter="task" type="button">任务</button>
+          <span class="memory-count"></span>
+        </div>
+        <div class="memory-list"></div>
+        <p class="memory-hint">自动提取只识别明确表达：记住… / 我叫… / 我偏好… / 以后叫我…。删除是不可恢复的硬删除。</p>
+      </div>
+    `;
+    root.append(card);
+    const close = () => { root.hidden = true; };
+    card.querySelector(".memory-close").addEventListener("click", close);
+    root.onclick = (event) => { if (event.target === root) close(); };
+
+    const listEl = card.querySelector(".memory-list");
+    const countEl = card.querySelector(".memory-count");
+    const form = card.querySelector(".memory-form");
+    const input = form.querySelector("input");
+    const kind = form.querySelector("select");
+    let memories = [];
+    let filter = "all";
+
+    function render() {
+      const visible = filter === "all" ? memories : memories.filter((m) => m.kind === filter);
+      countEl.textContent = `${visible.length} / ${memories.length}`;
+      if (!visible.length) {
+        listEl.innerHTML = `<div class="memory-empty">还没有这类记忆。<br>可以直接在上方添加，或在对话里说“请记住……”</div>`;
+        return;
+      }
+      listEl.innerHTML = visible.map((memory) => {
+        const kindClass = escapeHtml(memory.kind || "fact");
+        const source = memory.source_conversation_title
+          ? `来自会话《${escapeHtml(memory.source_conversation_title)}》`
+          : "来自对话";
+        return `
+          <article class="memory-card" data-memory-id="${escapeHtml(memory.id)}">
+            <div class="memory-card-top">
+              <span class="memory-kind ${kindClass}">${memoryKindLabel(memory.kind)}</span>
+              <time>${memoryDate(memory.created_at)}</time>
+              <button class="memory-delete" type="button" data-memory-delete="${escapeHtml(memory.id)}" title="删除这条记忆">
+                <svg class="icon"><use href="#i-trash"/></svg>
+              </button>
+            </div>
+            <p class="memory-content">${escapeHtml(memory.content)}</p>
+            <div class="memory-source">${source}${memory.hits ? ` · 已使用 ${memory.hits} 次` : ""}</div>
+          </article>`;
+      }).join("");
+    }
+
+    async function refresh() {
+      try {
+        const data = await api("/api/memories");
+        memories = data.memories || [];
+        render();
+      } catch (err) {
+        listEl.innerHTML = `<div class="memory-empty">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const content = input.value.trim();
+      if (!content) return;
+      const button = form.querySelector("button");
+      button.disabled = true;
+      try {
+        const data = await api("/api/memories", {
+          method: "POST",
+          body: {
+            kind: kind.value,
+            content,
+            importance: kind.value === "preference" ? 0.85 : 0.7,
+          },
+        });
+        input.value = "";
+        memories = data.memories || [];
+        render();
+        toast(data.memory?.status === "duplicate" ? "这条记忆已经存在" : "已记住");
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    card.querySelectorAll("[data-memory-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        filter = button.dataset.memoryFilter;
+        card.querySelectorAll("[data-memory-filter]").forEach((item) => {
+          item.classList.toggle("active", item === button);
+        });
+        render();
+      });
+    });
+
+    listEl.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-memory-delete]");
+      if (!button) return;
+      const id = button.dataset.memoryDelete;
+      if (!window.confirm("删除这条长期记忆？删除后无法恢复。")) return;
+      try {
+        await api(`/api/memories/${encodeURIComponent(id)}`, { method: "DELETE" });
+        memories = memories.filter((memory) => memory.id !== id);
+        render();
+        toast("已删除");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+
+    await refresh();
+  }
+
   function confirmDialog(title, message, confirmLabel = "确认") {
     return new Promise((resolve) => {
       const root = modalShell();
@@ -3003,6 +3153,7 @@
       if (conv) await renameConversation(conv);
     });
     $("#clear-conversation-cta").addEventListener("click", clearCurrentConversation);
+    $("#memory-btn").addEventListener("click", openMemoryManager);
 
     const input = $("#message-input");
     let compositionEndedAt = 0;

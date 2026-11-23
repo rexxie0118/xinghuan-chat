@@ -39,6 +39,7 @@ python3 -m venv .venv
 - LLM Tool Loop：MCP/plugin tools 自动调用
 - Token-aware context budget：历史/证据/工具结果压缩
 - 用户级长期记忆：fact / preference / task
+- 记忆管理 UI：查看/筛选/添加/删除
 - 页面内 Docs：迭代记录、Todo、历史架构图
 - Agent 模式执行脚本，展示 stdout / stderr / exit code / 工具轨迹
 - RAG 混合检索 + 本体图谱 + 引用回查
