@@ -72,6 +72,15 @@ class ApiTest(unittest.TestCase):
             bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
             self.assertEqual(bad.status_code, 400)
 
+    def test_memory_ui_entry_is_served(self):
+        with TestClient(self.app) as client:
+            page = client.get("/")
+            self.assertEqual(page.status_code, 200)
+            self.assertIn('id="memory-btn"', page.text)
+            js = client.get("/static/app.js")
+            self.assertEqual(js.status_code, 200)
+            self.assertIn("openMemoryManager", js.text)
+
     def test_user_memory_crud(self):
         with TestClient(self.app) as client:
             self.login(client)

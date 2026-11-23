@@ -3153,7 +3153,6 @@
       if (conv) await renameConversation(conv);
     });
     $("#clear-conversation-cta").addEventListener("click", clearCurrentConversation);
-    $("#memory-btn").addEventListener("click", openMemoryManager);
 
     const input = $("#message-input");
     let compositionEndedAt = 0;
@@ -3260,6 +3259,14 @@
 
     bindGraphInteractions();
   }
+
+  // Delegated fallback: the memory entry is also reachable if an earlier
+  // binding throws or a stale app.js is cached.
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#memory-btn")) return;
+    event.preventDefault();
+    openMemoryManager();
+  });
 
   document.addEventListener("DOMContentLoaded", boot);
 })();

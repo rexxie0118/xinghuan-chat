@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-11",
+      "title": "记忆 UI 入口修复",
+      "date": "2026-11-23",
+      "summary": "静态资源加版本号、记忆入口改为事件委托，修复点击无响应；新增静态资源回归测试。",
+      "record": "iterations/2026-11-23-11.html",
+      "diagrams": [
+        "architecture/2026-11-23-memory-ui.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-10",
       "title": "会话记忆提取与管理 UI",
       "date": "2026-11-23",
