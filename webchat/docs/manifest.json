@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-06",
+      "title": "内部 Plugin API 与 manifest",
+      "date": "2026-11-23",
+      "summary": "新增 trusted plugin manifest/PluginHost/PluginContext，支持 hooks 与 plugin tools。",
+      "record": "iterations/2026-11-23-06.html",
+      "diagrams": [
+        "architecture/2026-11-23-trusted-plugin-host.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-05",
       "title": "失败策略、重试、熔断与取消",
       "date": "2026-11-23",
@@ -112,6 +122,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-failure-policy.svg",
       "note": "失败分类、有限重试、外部 Agent 熔断、协作式取消已落地。"
+    },
+    {
+      "id": "2026-11-23-v7",
+      "label": "v7 · Trusted Plugin Host",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-trusted-plugin-host.svg",
+      "note": "trusted manifest、hook 订阅和 local plugin tools 已落地；租户插件仍禁止。"
     }
   ]
 }

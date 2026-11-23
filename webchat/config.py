@@ -73,6 +73,9 @@ class Settings:
     runtime_idle_delete_seconds: int = 604800
     runtime_idle_purge_seconds: int = 2592000
     runtime_reap_interval: int = 60
+    plugins_enabled: bool = True
+    plugins_config: Path | None = None
+    plugins_allow_external: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -118,6 +121,11 @@ class Settings:
             runtime_idle_delete_seconds=int(os.getenv("WEBCHAT_RUNTIME_IDLE_DELETE_SECONDS", "604800")),
             runtime_idle_purge_seconds=int(os.getenv("WEBCHAT_RUNTIME_IDLE_PURGE_SECONDS", "2592000")),
             runtime_reap_interval=int(os.getenv("WEBCHAT_RUNTIME_REAP_INTERVAL", "60")),
+            plugins_enabled=_env_bool("WEBCHAT_PLUGINS_ENABLED", True),
+            plugins_config=Path(
+                os.getenv("WEBCHAT_PLUGINS_CONFIG", ROOT / "plugins.json")
+            ).expanduser(),
+            plugins_allow_external=_env_bool("WEBCHAT_PLUGINS_ALLOW_EXTERNAL", False),
         )
         settings.ensure_dirs()
         return settings

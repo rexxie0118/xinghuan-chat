@@ -1,0 +1,230 @@
+"""Trusted in-process plugin host and manifest loader.
+
+A plugin is code running in the WebChat process with the same OS permissions.
+Only explicitly trusted manifests are loaded. Tenant code must not be loaded
+here; use MCP or a sandboxed Agent for untrusted extensions.
+"""
+
+from __future__ import annotations
+
+import importlib
+import json
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from .hooks import HookBus, HookContext
+
+LOG = logging.getLogger("webchat.runtime.plugins")
+MANIFEST_VERSION = 1
+KNOWN_EVENTS = {
+    "agent_start",
+    "agent_end",
+    "agent_error",
+    "agent_cancelled",
+    "retrieval_start",
+    "retrieval_end",
+    "answer_start",
+    "answer_end",
+    "tool_call",
+    "tool_result",
+}
+KNOWN_PERMISSIONS = {"hooks", "tools"}
+INTERNAL_PREFIX = "webchat.plugins."
+
+
+@dataclass
+class PluginManifest:
+    name: str
+    version: str
+    entrypoint: str
+    description: str = ""
+    enabled: bool = True
+    trusted: bool = False
+    permissions: set[str] = field(default_factory=set)
+    hooks: set[str] = field(default_factory=set)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PluginManifest":
+        name = str(data.get("name") or "").strip()
+        version = str(data.get("version") or "").strip()
+        entrypoint = str(data.get("entrypoint") or "").strip()
+        if not name or not version or not entrypoint:
+            raise ValueError("manifest 需要 name / version / entrypoint")
+        if ":" not in entrypoint:
+            raise ValueError("entrypoint 必须是 module:attr")
+        permissions = {str(p) for p in (data.get("permissions") or [])}
+        hooks = {str(h) for h in (data.get("hooks") or [])}
+        unknown = permissions - KNOWN_PERMISSIONS
+        if unknown:
+            raise ValueError(f"未知权限：{', '.join(sorted(unknown))}")
+        unknown_hooks = hooks - KNOWN_EVENTS
+        if unknown_hooks:
+            raise ValueError(f"未知 hook：{', '.join(sorted(unknown_hooks))}")
+        return cls(
+            name=name,
+            version=version,
+            entrypoint=entrypoint,
+            description=str(data.get("description") or ""),
+            enabled=bool(data.get("enabled", True)),
+            trusted=bool(data.get("trusted", False)),
+            permissions=permissions,
+            hooks=hooks,
+        )
+
+    def public(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "description": self.description,
+            "trusted": self.trusted,
+            "permissions": sorted(self.permissions),
+            "hooks": sorted(self.hooks),
+        }
+
+
+@dataclass
+class PluginStatus:
+    manifest: PluginManifest
+    status: str = "pending"
+    error: str = ""
+
+    def public(self) -> dict[str, Any]:
+        return {**self.manifest.public(), "status": self.status, "error": self.error}
+
+
+class PluginContext:
+    def __init__(self, host: "PluginHost", manifest: PluginManifest) -> None:
+        self.host = host
+        self.manifest = manifest
+        self.settings = host.settings
+        self.kernel = host.kernel
+        self.logger = logging.getLogger(f"webchat.plugin.{manifest.name}")
+        self.data: dict[str, Any] = {}
+
+    def on(self, event: str, handler) -> None:
+        if event not in KNOWN_EVENTS:
+            raise ValueError(f"未知 hook：{event}")
+        if "hooks" not in self.manifest.permissions:
+            raise PermissionError("插件没有 hooks 权限")
+        if self.manifest.hooks and event not in self.manifest.hooks:
+            raise PermissionError(f"插件 manifest 未允许 hook：{event}")
+        self.kernel.hooks.on(event, handler)
+
+    def register_tool(
+        self,
+        name: str,
+        *,
+        description: str,
+        input_schema: dict[str, Any] | None,
+        handler,
+        timeout: float = 10.0,
+        dangerous: bool = False,
+    ) -> None:
+        if "tools" not in self.manifest.permissions:
+            raise PermissionError("插件没有 tools 权限")
+        self.host.register_tool(
+            self.manifest.name,
+            name,
+            description=description,
+            input_schema=input_schema,
+            handler=handler,
+            timeout=timeout,
+            dangerous=dangerous,
+        )
+
+
+class PluginHost:
+    def __init__(self, settings: Any, kernel: Any, tools: Any) -> None:
+        self.settings = settings
+        self.kernel = kernel
+        self.tools = tools
+        self.statuses: list[PluginStatus] = []
+
+    def load(self) -> "PluginHost":
+        if not getattr(self.settings, "plugins_enabled", True):
+            return self
+        path = getattr(self.settings, "plugins_config", None)
+        if not path:
+            path = Path(self.settings.root) / "plugins.json"
+        path = Path(path)
+        if not path.exists():
+            return self
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            LOG.warning("plugin config invalid: %s", exc)
+            return self
+        entries = payload.get("plugins") if isinstance(payload, dict) else payload
+        if not isinstance(entries, list):
+            LOG.warning("plugin config must contain a plugins list")
+            return self
+        for raw in entries:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                manifest = PluginManifest.from_dict(raw)
+            except ValueError as exc:
+                LOG.warning("plugin manifest invalid: %s", exc)
+                continue
+            status = PluginStatus(manifest)
+            self.statuses.append(status)
+            if not manifest.enabled:
+                status.status = "disabled"
+                continue
+            try:
+                self._load_one(manifest)
+                status.status = "loaded"
+            except Exception as exc:  # noqa: BLE001
+                status.status = "error"
+                status.error = f"{type(exc).__name__}: {exc}"
+                LOG.warning("plugin %s failed: %s", manifest.name, exc)
+        return self
+
+    def _load_one(self, manifest: PluginManifest) -> None:
+        if not manifest.trusted:
+            raise PermissionError("插件未标记 trusted=true")
+        if not getattr(self.settings, "plugins_allow_external", False):
+            if not manifest.entrypoint.startswith(INTERNAL_PREFIX):
+                raise PermissionError("默认只允许 webchat.plugins.* 内部插件")
+        module_name, attr = manifest.entrypoint.split(":", 1)
+        module = importlib.import_module(module_name)
+        target = module
+        for part in attr.split("."):
+            target = getattr(target, part)
+        plugin = target() if isinstance(target, type) else target
+        if not hasattr(plugin, "setup"):
+            raise TypeError("插件必须提供 setup(ctx)")
+        plugin.setup(PluginContext(self, manifest))
+
+    def register_tool(
+        self,
+        plugin_name: str,
+        tool_name: str,
+        *,
+        description: str,
+        input_schema: dict[str, Any] | None,
+        handler,
+        timeout: float,
+        dangerous: bool,
+    ) -> None:
+        full = f"plugin.{plugin_name}.{tool_name}"
+        self.tools.register_local(
+            name=full,
+            description=description,
+            input_schema=input_schema,
+            handler=handler,
+            timeout=timeout,
+            dangerous=dangerous,
+        )
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "enabled": bool(self.statuses),
+            "plugins": [s.public() for s in self.statuses],
+        }
+
+
+def load_plugin_host(settings: Any, kernel: Any, tools: Any) -> PluginHost:
+    return PluginHost(settings, kernel, tools).load()

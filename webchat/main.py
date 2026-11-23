@@ -41,6 +41,7 @@ from .tools import ToolError, build_tool_registry
 from .runtime.cancel import ActiveRuns
 from .runtime.failures import RunCancelled, classify_exception
 from .runtime import AgentKernel
+from .runtime.plugins import load_plugin_host
 from .security import (
     COOKIE_NAME,
     hash_password,
@@ -215,6 +216,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     runner = AgentRunner(settings, sandbox)
     kernel = AgentKernel(settings, runner)
     tools = build_tool_registry(settings)
+    plugin_host = load_plugin_host(settings, kernel, tools)
 
     conn = connect(settings.db_path)
     try:
@@ -275,6 +277,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.runner = runner
     app.state.kernel = kernel
     app.state.tools = tools
+    app.state.plugin_host = plugin_host
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -341,6 +344,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "default_department": registry.default_department,
             "knowledge_bases": registry.catalog_public(),
             "tools": tools.summary(),
+            "plugins": plugin_host.summary(),
             "kb": {
                 "provider": default_service.provider.kind,
                 "chat_model": getattr(
@@ -504,6 +508,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ContainerRuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"ok": True}
+
+    @app.get("/api/plugins")
+    def list_plugins(user: dict[str, Any] = User) -> dict[str, Any]:
+        return plugin_host.summary()
 
     # --------------------------------------------------------------- tools
 

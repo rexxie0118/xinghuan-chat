@@ -1,0 +1,14 @@
+{
+  "plugins": [
+    {
+      "name": "audit",
+      "version": "1.0.0",
+      "entrypoint": "webchat.plugins.audit:plugin",
+      "description": "Example trusted plugin: lifecycle hook + local ping tool",
+      "enabled": false,
+      "trusted": true,
+      "permissions": ["hooks", "tools"],
+      "hooks": ["agent_end"]
+    }
+  ]
+}

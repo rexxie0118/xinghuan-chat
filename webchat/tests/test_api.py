@@ -81,6 +81,14 @@ class ApiTest(unittest.TestCase):
             self.assertFalse(resp.json()["cancelled"])
             client.delete(f"/api/conversations/{conv['id']}")
 
+    def test_plugins_endpoint_starts_empty(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            resp = client.get("/api/plugins")
+            self.assertEqual(resp.status_code, 200)
+            self.assertFalse(resp.json()["enabled"])
+            self.assertEqual(resp.json()["plugins"], [])
+
     def test_runtime_mapping_endpoint_starts_empty(self):
         with TestClient(self.app) as client:
             self.login(client)

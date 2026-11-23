@@ -9,3 +9,6 @@ __pycache__/
 
 # Local MCP server config may contain tokens
 mcp.json
+
+# Local trusted plugin manifest
+plugins.json

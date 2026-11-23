@@ -427,6 +427,7 @@ class ToolRegistry:
         self._clients: dict[str, MCPClient] = {}
         self._specs: dict[str, ToolSpec] = {}
         self._status: dict[str, dict[str, Any]] = {}
+        self._handlers: dict[str, Any] = {}
         self._lock = threading.RLock()
 
     def discover(self) -> "ToolRegistry":
@@ -489,6 +490,33 @@ class ToolRegistry:
                     LOG.warning("MCP server %s unavailable: %s", server_name, exc)
             return self
 
+    def register_local(
+        self,
+        *,
+        name: str,
+        description: str,
+        input_schema: dict[str, Any] | None,
+        handler: Any,
+        timeout: float = 10.0,
+        dangerous: bool = False,
+    ) -> None:
+        """Register an in-process, trusted plugin tool."""
+        if not name or "." not in name:
+            raise ToolError("插件工具名必须是 <plugin>.<tool>")
+        if not callable(handler):
+            raise ToolError("插件工具 handler 必须可调用")
+        with self._lock:
+            self._specs[name] = ToolSpec(
+                name=name,
+                description=description,
+                input_schema=input_schema or {"type": "object", "properties": {}},
+                server="plugin",
+                raw_name=name,
+                timeout=float(timeout),
+                dangerous=dangerous,
+            )
+            self._handlers[name] = handler
+
     def list_tools(self) -> list[ToolSpec]:
         return sorted(self._specs.values(), key=lambda s: s.name)
 
@@ -499,14 +527,37 @@ class ToolRegistry:
         spec = self._specs.get(name)
         if spec is None:
             raise ToolError(f"工具不存在或未授权：{name}")
-        client = self._clients.get(spec.server)
-        if client is None:
-            raise ToolError(f"MCP server 未连接：{spec.server}")
         if arguments is None:
             arguments = {}
         if not isinstance(arguments, dict):
             raise ToolError("工具参数必须是 JSON object")
         started = time.perf_counter()
+        if name in self._handlers:
+            try:
+                raw = self._handlers[name](arguments)
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("plugin tool failed: tool=%s error=%s", name, type(exc).__name__)
+                raise ToolError(f"插件工具调用失败：{type(exc).__name__}: {exc}") from exc
+            duration = int((time.perf_counter() - started) * 1000)
+            if isinstance(raw, ToolResult):
+                raw.duration_ms = duration
+                return raw
+            if not isinstance(raw, dict):
+                raw = {"content": str(raw)}
+            text, structured = _normalize_content(raw)
+            is_error = bool(raw.get("isError"))
+            return ToolResult(
+                ok=not is_error,
+                tool=name,
+                content=_truncate(text),
+                server="plugin",
+                duration_ms=duration,
+                is_error=is_error,
+                structured=structured,
+            )
+        client = self._clients.get(spec.server)
+        if client is None:
+            raise ToolError(f"MCP server 未连接：{spec.server}")
         try:
             raw = client.call_tool(spec.raw_name, arguments)
         except ToolError as exc:

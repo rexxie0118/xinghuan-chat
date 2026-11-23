@@ -720,6 +720,49 @@ webchat/docs/architecture/<date>-*.svg    当前架构图
 
 规则见 [`webchat/docs/README.md`](docs/README.md)。
 
+### Trusted Plugin API 与 manifest
+
+当前只支持**可信内部插件**，运行在 Web 进程内。示例：
+
+```bash
+cp webchat/plugins.example.json webchat/plugins.json
+```
+
+```json
+{
+  "plugins": [
+    {
+      "name": "audit",
+      "version": "1.0.0",
+      "entrypoint": "webchat.plugins.audit:plugin",
+      "trusted": true,
+      "permissions": ["hooks", "tools"],
+      "hooks": ["agent_end"]
+    }
+  ]
+}
+```
+
+插件可以：
+
+- `ctx.on(event, handler)`：订阅生命周期；
+- `ctx.register_tool(...)`：注册 `plugin.<name>.<tool>`；
+- manifest 必须 `trusted=true`；
+- 默认只允许 `webchat.plugins.*`；
+- 没有热加载；重启生效。
+
+API：
+
+```text
+GET /api/plugins
+```
+
+安全边界：
+
+- 插件是进程内代码，不做租户隔离；
+- 租户代码只能走 MCP / Apple Container；
+- `plugins.json` 已 gitignore。
+
 ### AgentKernel 与插件扩展点
 
 `webchat/runtime/` 是 P0 的 kernel 层，不重写现有 RAG / ImportedAgent：
@@ -785,9 +828,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader。
 
-> 当前共 38 项测试，全部通过。
+> 当前共 42 项测试，全部通过。
 
 ---
 
