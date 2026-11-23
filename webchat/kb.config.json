@@ -25,6 +25,7 @@
   },
   "answer": {
     "max_context_chars": 6000,
+    "max_context_tokens": 6000,
     "min_score": 0.005,
     "language": "zh",
     "extractive_floor_ratio": 0.85,

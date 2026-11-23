@@ -78,6 +78,8 @@ class Settings:
     plugins_allow_external: bool = False
     tool_loop_enabled: bool = True
     tool_max_steps: int = 4
+    context_max_tokens: int = 12000
+    context_reserve_tokens: int = 1200
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -130,6 +132,8 @@ class Settings:
             plugins_allow_external=_env_bool("WEBCHAT_PLUGINS_ALLOW_EXTERNAL", False),
             tool_loop_enabled=_env_bool("WEBCHAT_TOOL_LOOP_ENABLED", True),
             tool_max_steps=int(os.getenv("WEBCHAT_TOOL_MAX_STEPS", "4")),
+            context_max_tokens=int(os.getenv("WEBCHAT_CONTEXT_MAX_TOKENS", "12000")),
+            context_reserve_tokens=int(os.getenv("WEBCHAT_CONTEXT_RESERVE_TOKENS", "1200")),
         )
         settings.ensure_dirs()
         return settings

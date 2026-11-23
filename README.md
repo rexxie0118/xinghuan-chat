@@ -37,6 +37,7 @@ python3 -m venv .venv
 - Apple Container 一次性 Agent 执行沙箱
 - AgentKernel + 可信 plugin hook / manifest / tool 扩展
 - LLM Tool Loop：MCP/plugin tools 自动调用
+- Token-aware context budget：历史/证据/工具结果压缩
 - 页面内 Docs：迭代记录、Todo、历史架构图
 - Agent 模式执行脚本，展示 stdout / stderr / exit code / 工具轨迹
 - RAG 混合检索 + 本体图谱 + 引用回查

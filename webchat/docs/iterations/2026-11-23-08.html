@@ -1,0 +1,123 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-23-08</div>
+    <h1>Token 级上下文预算</h1>
+    <p class="lede">
+      新增 ContextBudget：按 token 估算压缩 question / evidence / history / graph
+      和工具结果；RAG prompt 与 Tool Loop 都受预算约束。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：46 项通过</span>
+      <span>架构：v9</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>本迭代完成</h2>
+    <div class="change-grid">
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Token 估算</h3>
+        <p>CJK 约 1 token/字，ASCII 约 3.5 字符/token；不依赖 tokenizer。</p>
+        <code>kb/context_budget.py</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>优先级打包</h3>
+        <p>question &gt; evidence &gt; history &gt; graph，超预算时截断低优先级。</p>
+        <code>fit_sections</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>工具上下文</h3>
+        <p>每轮 Tool Loop 前压缩旧 tool/history；保留 system 和最新 user。</p>
+        <code>fit_messages</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>配置</h2>
+    <pre class="record-pre">WEBCHAT_CONTEXT_MAX_TOKENS=12000
+WEBCHAT_CONTEXT_RESERVE_TOKENS=1200
+
+kb.answer.max_context_tokens=7000
+webchat/kb.config.json answer.max_context_tokens=6000</pre>
+  </section>
+
+  <section>
+    <h2>输出</h2>
+    <pre class="record-pre">Tool Loop meta.context:
+{
+  "max_tokens": 12000,
+  "reserve_tokens": 1200,
+  "input_tokens": 10800,
+  "used_tokens": ...,
+  "truncated": true,
+  "dropped_sections": ["graph"]
+}
+
+RAG answer.context:
+{"max_tokens": 7000, "used_tokens": ..., "truncated": false}</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>估算是启发式，不是 DeepSeek 官方 tokenizer；预算偏保守。</li>
+      <li>Tool Loop 只压缩文本，不改变工具调用/结果配对协议。</li>
+      <li>RAG prompt 截断后会过滤已消失的引用编号。</li>
+      <li>导入 Agent 的 pipeline prompt 还未全部接入同一预算。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-23-context-budget.svg" alt="v9 context budget" />
+      <figcaption>v9：统一的 token 预算与优先级压缩。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">12 项完成，14 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>用户级长期记忆：把会话中稳定的偏好/事实写入 memory，并在预算内召回。</p>
+  </section>
+</article>

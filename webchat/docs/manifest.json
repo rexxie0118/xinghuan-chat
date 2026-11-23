@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-08",
+      "title": "Token 级上下文预算",
+      "date": "2026-11-23",
+      "summary": "新增 ContextBudget，按优先级压缩 RAG prompt 和 Tool Loop 上下文，输出 meta.context。",
+      "record": "iterations/2026-11-23-08.html",
+      "diagrams": [
+        "architecture/2026-11-23-context-budget.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-07",
       "title": "真正的 Tool Loop",
       "date": "2026-11-23",
@@ -146,6 +156,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-tool-loop.svg",
       "note": "LLM tool_calls → ToolRegistry → role=tool → 继续推理；工具同步执行。"
+    },
+    {
+      "id": "2026-11-23-v9",
+      "label": "v9 · Context Budget",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-context-budget.svg",
+      "note": "token 估算、优先级打包和工具消息压缩已落地。"
     }
   ]
 }

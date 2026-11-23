@@ -51,6 +51,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "answer": {
         "max_context_chars": 7000,
+        "max_context_tokens": 7000,
         "min_score": 0.005,
         "language": "zh",
         "abstain_on_unknown_terms": True,

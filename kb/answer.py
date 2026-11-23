@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
+from .context_budget import ContextBudget, estimate_tokens
 from .retrieval import ChunkHit, RetrievalResult
 from .textutil import FUNCTION_CHARS, embed_tokens, split_sentences
 from .util import truncate
@@ -64,6 +65,7 @@ class Answer:
     mode: str = "extractive"  # llm | extractive | no-answer
     confidence: float = 0.0
     warnings: list[str] = field(default_factory=list)
+    context: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -72,6 +74,7 @@ class Answer:
             "confidence": self.confidence,
             "citations": [c.to_dict() for c in self.citations],
             "warnings": self.warnings,
+            "context": self.context,
         }
 
 
@@ -144,6 +147,8 @@ def build_prompt(
     question: str,
     result: RetrievalResult,
     history: Sequence[dict[str, str]] | None = None,
+    *,
+    max_tokens: int | None = None,
 ) -> tuple[str, list[Citation]]:
     blocks, citations = _evidence_blocks(result.hits)
     parts = [f"问题：{question}"]
@@ -161,7 +166,12 @@ def build_prompt(
     if memories:
         parts.append(f"关于使用者的长期记忆（不是文档证据，回答时不要编号引用）：\n{memories}")
     parts.append("请作答。")
-    return "\n\n".join(parts), citations
+    prompt = "\n\n".join(parts)
+    if max_tokens:
+        prompt, _report = ContextBudget(max_tokens, reserve_tokens=0).fit_text(prompt)
+        # Citations whose evidence block was cut must not be offered as valid.
+        citations = [c for c in citations if f"[{c.index}]" in prompt]
+    return prompt, citations
 
 
 def should_abstain(question: str, result: RetrievalResult, cfg: dict) -> bool:
@@ -217,7 +227,18 @@ def synthesize(
     if provider is None or provider.is_mock:
         return _extractive(question, hits, result, cfg)
 
-    prompt, citations = build_prompt(question, result, history=history)
+    max_context_tokens = int(cfg.get("max_context_tokens", 7000))
+    prompt, citations = build_prompt(
+        question,
+        result,
+        history=history,
+        max_tokens=max_context_tokens,
+    )
+    context_info = {
+        "max_tokens": max_context_tokens,
+        "used_tokens": estimate_tokens(prompt),
+        "truncated": "上下文已压缩" in prompt,
+    }
     try:
         text = provider.chat.complete(
             SYSTEM_PROMPT, prompt, max_tokens=int(cfg.get("max_tokens", 900))
@@ -236,7 +257,10 @@ def synthesize(
         mode="llm",
         confidence=_confidence(hits, used),
         warnings=list(result.warnings),
+        context=context_info,
     )
+    if "上下文已压缩" in prompt:
+        answer.warnings.append("上下文超出 token 预算，已压缩证据/历史后再生成")
     if not used:
         answer.warnings.append("模型回答中没有检测到有效引用编号，请自行核对来源")
     return answer

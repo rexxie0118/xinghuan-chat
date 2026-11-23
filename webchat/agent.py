@@ -24,6 +24,7 @@ import httpx
 
 from .agent_defs import ImportedAgent, cited_indices
 from .config import Settings
+from kb.context_budget import ContextBudget, Section
 from .knowledge import KnowledgeService
 from .runtime.cancel import CancellationToken
 from .runtime.failures import (
@@ -459,6 +460,7 @@ class AgentRunner:
                     "entities": len(result.get("graph", {}).get("nodes", [])),
                     "relations": len(result.get("graph", {}).get("edges", [])),
                 },
+                "context": answer_dict.get("context") or {},
             },
         )
 
@@ -551,17 +553,33 @@ class AgentRunner:
             "每个关键结论后用 [编号] 标注知识库来源；不要编造来源。"
             "用中文简洁回答。"
         )
-        messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
-        for message in history[-6:]:
-            content = " ".join((message.get("content") or "").split())[:1200]
-            if content:
-                messages.append({"role": message.get("role", "user"), "content": content})
-        context_parts = [f"问题：{question}"]
-        if evidence:
-            context_parts.append("知识库证据：\n" + "\n\n".join(evidence))
+        history_text = "\n".join(
+            f"{'用户' if message.get('role') == 'user' else '助手'}："
+            + " ".join((message.get("content") or "").split())[:900]
+            for message in history[-6:]
+            if (message.get("content") or "").strip()
+        )
+        budget = ContextBudget(
+            int(getattr(self.settings, "context_max_tokens", 12000)),
+            reserve_tokens=int(getattr(self.settings, "context_reserve_tokens", 1200)),
+        )
+        sections = [
+            Section("question", f"问题：{question}", priority=0, required=True),
+            Section(
+                "evidence",
+                "知识库证据：\n" + "\n\n".join(evidence),
+                priority=1,
+            ),
+        ]
         if graph_names:
-            context_parts.append(f"相关实体：{graph_names}")
-        messages.append({"role": "user", "content": "\n\n".join(context_parts)})
+            sections.append(Section("graph", f"相关实体：{graph_names}", priority=3))
+        if history_text:
+            sections.append(Section("history", f"对话历史：\n{history_text}", priority=2))
+        user_context, context_report = budget.fit_sections(sections)
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_context},
+        ]
 
         trace = list(base_trace)
         tool_steps = 0
@@ -572,6 +590,12 @@ class AgentRunner:
         try:
             for step in range(max_steps):
                 self._check_cancel(cancel_token)
+                messages, message_report = budget.fit_messages(messages)
+                if message_report.truncated:
+                    context_report.truncated = True
+                context_report.used_tokens = max(
+                    context_report.used_tokens, message_report.used_tokens
+                )
                 status("Agent 工具循环", f"第 {step + 1}/{max_steps} 步 · {len(tool_map)} 个工具可用")
                 response = provider(
                     messages,
@@ -669,6 +693,21 @@ class AgentRunner:
                 final_text = "工具调用已完成，但模型没有生成最终回答。"
             else:
                 return None
+        if context_report.truncated or context_report.dropped_sections:
+            trace.append(
+                _step(
+                    "上下文预算",
+                    f"max={context_report.max_tokens} reserve={context_report.reserve_tokens} "
+                    f"used={context_report.used_tokens} "
+                    f"dropped={len(context_report.dropped_sections)}",
+                    kind="check",
+                    status="done",
+                    logic=(
+                        "按 token 估算压缩上下文：CJK 约 1 token/字，ASCII 约 3.5 字符/token；"
+                        "优先级 question > evidence > history > graph，工具输出先截断。"
+                    ),
+                )
+            )
         indices = cited_indices(final_text, len(hits))
         citations = self._citations_from_indices(indices, result)
         return AgentResult(
@@ -688,6 +727,7 @@ class AgentRunner:
                 "timings": result.get("stats", {}).get("timings", {}),
                 "kb_id": kb.info.id,
                 "kb_name": kb.info.name,
+                "context": context_report.public(),
             },
         )
 

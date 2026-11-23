@@ -720,6 +720,41 @@ webchat/docs/architecture/<date>-*.svg    当前架构图
 
 规则见 [`webchat/docs/README.md`](docs/README.md)。
 
+### Token 级上下文预算
+
+`kb/context_budget.py` 提供不需要 tokenizer 的保守估算：
+
+```text
+CJK: 约 1 token / 字
+ASCII: 约 3.5 字符 / token
+```
+
+配置：
+
+```dotenv
+WEBCHAT_CONTEXT_MAX_TOKENS=12000
+WEBCHAT_CONTEXT_RESERVE_TOKENS=1200
+```
+
+预算分配：
+
+```text
+question（必选）
+→ evidence（知识库证据）
+→ history（最近对话）
+→ graph（实体）
+```
+
+Tool Loop 中：
+
+- 工具结果先截断；
+- 每轮调用前用 `fit_messages()` 再检查；
+- system 和最新 user 消息保留；
+- 旧 tool / history 内容优先压缩；
+- `meta.context` 记录 `max_tokens / used_tokens / truncated / dropped_sections`。
+
+严格 RAG prompt 使用 `answer.max_context_tokens`（默认 7000）；超出后压缩证据并过滤已删除的引用编号。
+
 ### Tool Loop
 
 Agent 模式下，如果：
@@ -872,9 +907,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算。
 
-> 当前共 43 项测试，全部通过。
+> 当前共 46 项测试，全部通过。
 
 ---
 
