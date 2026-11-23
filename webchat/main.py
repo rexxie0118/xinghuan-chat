@@ -35,7 +35,8 @@ from .config import Settings
 from .db import connect, init_db
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
-from .sandbox.apple_runtime import AppleContainerRuntime
+from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
+from .container_workspaces import ContainerWorkspaceService
 from .tools import ToolError, build_tool_registry
 from .runtime import AgentKernel
 from .security import (
@@ -103,6 +104,10 @@ class ToolCallIn(BaseModel):
 
 class AgentTestIn(BaseModel):
     question: str = Field(default="测试执行：请输出 OK", min_length=1, max_length=2000)
+
+
+class RuntimeEnsureIn(BaseModel):
+    conversation_id: str | None = Field(default=None, max_length=80)
 
 
 class AgentConfigIn(BaseModel):
@@ -199,6 +204,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     registry = KnowledgeRegistry(settings)
     sandbox = build_sandbox_runner(settings)
     container_runtime = AppleContainerRuntime(settings)
+    workspace_service = ContainerWorkspaceService(settings, container_runtime)
     runner = AgentRunner(settings, sandbox)
     kernel = AgentKernel(settings, runner)
     tools = build_tool_registry(settings)
@@ -231,6 +237,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.kb = registry.get(registry.infos[0].id)
     app.state.sandbox = sandbox
     app.state.container_runtime = container_runtime
+    app.state.workspace_service = workspace_service
     app.state.runner = runner
     app.state.kernel = kernel
     app.state.tools = tools
@@ -394,6 +401,56 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "default": default.info.id if default else None,
             "departments": registry.departments,
         }
+
+    # ------------------------------------------------------------- runtimes
+
+    @app.get("/api/runtimes/me")
+    def my_runtime(user: dict[str, Any] = User) -> dict[str, Any]:
+        return {"mapping": workspace_service.get(user["id"])}
+
+    @app.post("/api/runtimes/me/ensure")
+    def ensure_my_runtime(
+        payload: RuntimeEnsureIn, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        try:
+            if payload.conversation_id:
+                db = connect(settings.db_path)
+                try:
+                    conversation = repo.get_conversation(
+                        db,
+                        conversation_id=payload.conversation_id,
+                        user_id=user["id"],
+                    )
+                finally:
+                    db.close()
+                if conversation is None:
+                    raise HTTPException(status_code=404, detail="会话不存在")
+                mapping = workspace_service.ensure_workspace(
+                    user["id"], payload.conversation_id
+                )
+            else:
+                mapping = workspace_service.ensure_user(user["id"])
+        except ContainerRuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"mapping": mapping, "state": workspace_service.get(user["id"])}
+
+    @app.post("/api/runtimes/me/stop")
+    def stop_my_runtime(user: dict[str, Any] = User) -> dict[str, Any]:
+        try:
+            mapping = workspace_service.stop(user["id"])
+        except ContainerRuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"mapping": mapping}
+
+    @app.delete("/api/runtimes/me")
+    def delete_my_runtime(
+        delete_volume: bool = Query(default=False), user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        try:
+            workspace_service.delete(user["id"], delete_volume=delete_volume)
+        except ContainerRuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"ok": True}
 
     # --------------------------------------------------------------- tools
 
@@ -849,6 +906,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 imported_agent = get_agent(db, payload.agent_id, user["id"])
                 if imported_agent is None:
                     raise HTTPException(status_code=404, detail="Agent 不存在或不属于你")
+            if (
+                imported_agent is not None
+                and settings.sandbox == "apple-container"
+                and settings.runtime_auto_ensure
+            ):
+                try:
+                    workspace_service.ensure_workspace(user["id"], conversation_id)
+                except Exception as exc:  # noqa: BLE001 - runtime is optional
+                    LOG.warning("container workspace ensure failed: %s", exc)
             history = repo.conversation_context(
                 db, conversation_id=conversation_id, user_id=user["id"], limit=8
             )

@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-03",
+      "title": "per-user 容器与 workspace 映射",
+      "date": "2026-11-23",
+      "summary": "user → runtime、conversation → workspace 映射持久化，提供 /api/runtimes 并在 Apple sandbox 下自动 ensure。",
+      "record": "iterations/2026-11-23-03.html",
+      "diagrams": [
+        "architecture/2026-11-23-user-workspace-mapping.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-02",
       "title": "Apple Container 常驻运行时管理器",
       "date": "2026-11-23",
@@ -61,6 +71,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-runtime-manager.svg",
       "note": "常驻容器运行时管理器已落地；session mapping 与 idle reaper 仍为 planned。"
+    },
+    {
+      "id": "2026-11-23-v4",
+      "label": "v4 · User Workspace Mapping",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-user-workspace-mapping.svg",
+      "note": "per-user runtime 与 per-conversation workspace 已持久化；执行迁移、idle reaper 仍待做。"
     }
   ]
 }

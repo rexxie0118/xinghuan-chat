@@ -67,6 +67,7 @@ class Settings:
     apple_container_cpus: int = 2
     apple_container_memory: str = "2G"
     apple_container_network: str = "default"
+    runtime_auto_ensure: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -106,6 +107,7 @@ class Settings:
             apple_container_cpus=int(os.getenv("APPLE_CONTAINER_CPUS", "2")),
             apple_container_memory=(os.getenv("APPLE_CONTAINER_MEMORY") or "2G").strip(),
             apple_container_network=(os.getenv("APPLE_CONTAINER_NETWORK") or "default").strip(),
+            runtime_auto_ensure=_env_bool("WEBCHAT_RUNTIME_AUTO_ENSURE", True),
         )
         settings.ensure_dirs()
         return settings

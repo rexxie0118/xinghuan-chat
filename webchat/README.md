@@ -376,6 +376,28 @@ key → xh-rt-<hash> + xh-vol-<hash>
 
 当前仅在 `app.state.container_runtime` 挂载，**还没有接入聊天请求**；下一步才是 per-user/session 映射和 idle reaper。
 
+### per-user 容器与 workspace 映射
+
+映射持久化在：
+
+```sql
+user_runtimes(user_id, runtime_key, container_name, volume_name, image, state,
+              created_at, last_active_at, updated_at)
+container_workspaces(conversation_id, user_id, runtime_key, workspace_path,
+                     created_at, last_active_at)
+```
+
+API：
+
+```text
+GET    /api/runtimes/me
+POST   /api/runtimes/me/ensure          {conversation_id?}
+POST   /api/runtimes/me/stop
+DELETE /api/runtimes/me?delete_volume=false
+```
+
+Apple sandbox 下，首次使用导入 Agent 会自动 ensure 用户容器和会话 workspace。
+
 ### 执行边界
 
 这不是强沙箱，只是 Demo 级隔离：
@@ -722,9 +744,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时与 workspace 映射。
 
-> 当前共 28 项测试，全部通过。
+> 当前共 31 项测试，全部通过。
 
 ---
 

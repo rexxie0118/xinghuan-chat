@@ -72,6 +72,13 @@ class ApiTest(unittest.TestCase):
             bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
             self.assertEqual(bad.status_code, 400)
 
+    def test_runtime_mapping_endpoint_starts_empty(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            resp = client.get("/api/runtimes/me")
+            self.assertEqual(resp.status_code, 200)
+            self.assertIsNone(resp.json()["mapping"])
+
     def test_docs_site_is_served(self):
         with TestClient(self.app) as client:
             page = client.get("/docs/")

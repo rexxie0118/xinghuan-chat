@@ -80,6 +80,30 @@ SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_agent_runs_user ON agent_runs(user_id, created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS user_runtimes (
+        user_id        TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        runtime_key    TEXT NOT NULL UNIQUE,
+        container_name TEXT NOT NULL,
+        volume_name    TEXT NOT NULL,
+        image          TEXT NOT NULL,
+        state          TEXT NOT NULL DEFAULT 'missing',
+        created_at     TEXT NOT NULL,
+        last_active_at TEXT NOT NULL,
+        updated_at     TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS container_workspaces (
+        conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        runtime_key     TEXT NOT NULL,
+        workspace_path  TEXT NOT NULL,
+        created_at      TEXT NOT NULL,
+        last_active_at  TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_container_workspaces_user ON container_workspaces(user_id, last_active_at DESC)",
 ]
 
 
