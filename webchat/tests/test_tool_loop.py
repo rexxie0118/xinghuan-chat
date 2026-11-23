@@ -96,6 +96,7 @@ class ToolLoopTest(unittest.TestCase):
             result=result,
             base_trace=[],
             kb=kb,
+            memories=[],
             status=lambda *_args: None,
             cancel_token=None,
         )

@@ -1,0 +1,116 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-23-09</div>
+    <h1>用户级长期记忆</h1>
+    <p class="lede">
+      新增 user_memories 与 UserMemoryService：按用户隔离的 fact / preference / task，
+      支持自动提取、词法召回、冲突替代和硬删除。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：49 项通过</span>
+      <span>架构：v10</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>本迭代完成</h2>
+    <div class="change-grid">
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>用户隔离</h3>
+        <p>user_memories 按 user_id 作用域；与 KB 全局 memories 表分离。</p>
+        <code>webchat/user_memory.py</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>自动提取</h3>
+        <p>只匹配明确表达：记住 / 我叫 / 我偏好 / 以后叫我，避免把闲聊写进记忆。</p>
+        <code>extract_candidates</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>召回与管理</h3>
+        <p>词法 + importance + recency 排序；GET/POST/DELETE /api/memories。</p>
+        <code>recall / remember / forget</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">输入:
+我叫林晓，我更喜欢简洁回答。请记住：项目代号北极星。
+
+提取:
+fact        项目代号北极星
+fact        我的名字是林晓
+preference  我偏好：简洁回答
+
+列表: 3 条
+召回: 命中林晓/偏好
+冲突: 名字张三 → 李四，旧值 valid_to 保留
+删除: 硬删除成功
+
+49 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>自动提取是规则式，不调用 LLM；复杂事实需要显式 POST。</li>
+      <li>记忆只进入软上下文，不参与 [n] 文档引用。</li>
+      <li>管理 UI 还未做；当前通过 API 查看/删除。</li>
+      <li>召回使用词法而非 embedding，跨同义词能力有限。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-23-user-memory.svg" alt="v10 user memory" />
+      <figcaption>v10：用户消息 → 提取/存储 → 召回为软上下文；与文档证据隔离。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">13 项完成，13 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>高并发控制：请求队列、信号量、背压、取消与超时；当前仍是单进程同步执行。</p>
+  </section>
+</article>

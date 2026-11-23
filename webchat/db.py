@@ -117,6 +117,28 @@ SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_container_checkpoints_user ON container_checkpoints(user_id, updated_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS user_memories (
+        id                     TEXT PRIMARY KEY,
+        user_id                TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        kind                   TEXT NOT NULL,
+        content                TEXT NOT NULL,
+        subject                TEXT NOT NULL DEFAULT '',
+        predicate              TEXT NOT NULL DEFAULT '',
+        object_text            TEXT NOT NULL DEFAULT '',
+        importance             REAL NOT NULL DEFAULT 0.5,
+        confidence             REAL NOT NULL DEFAULT 0.7,
+        hits                   INTEGER NOT NULL DEFAULT 0,
+        source_conversation_id TEXT NOT NULL DEFAULT '',
+        source_message_id      TEXT NOT NULL DEFAULT '',
+        created_at             TEXT NOT NULL,
+        updated_at             TEXT NOT NULL,
+        last_used_at           TEXT NOT NULL,
+        valid_to               TEXT,
+        superseded_by          TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_memories_user ON user_memories(user_id, valid_to, last_used_at DESC)",
 ]
 
 

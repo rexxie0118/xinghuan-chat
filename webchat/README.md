@@ -720,6 +720,50 @@ webchat/docs/architecture/<date>-*.svg    当前架构图
 
 规则见 [`webchat/docs/README.md`](docs/README.md)。
 
+### 用户级长期记忆
+
+存储：
+
+```sql
+user_memories(
+  id, user_id, kind, content, subject, predicate, object_text,
+  importance, confidence, hits, source_conversation_id, source_message_id,
+  created_at, updated_at, last_used_at, valid_to, superseded_by
+)
+```
+
+类型：`fact` / `preference` / `task`。
+
+自动提取（只匹配明确表达，避免把每句话都写成记忆）：
+
+```text
+记住：...
+我叫...
+我的名字是...
+我更喜欢 / 我偏好...
+以后叫我 / 回答用...
+```
+
+召回：
+
+```text
+词法相似度 0.65
++ importance 0.25
++ recency 0.10
+```
+
+记忆只进入软上下文，**不作为文档证据**，不参与 `[n]` 引用。
+
+API：
+
+```http
+GET    /api/memories
+POST   /api/memories        {kind, content, subject?, predicate?, importance?}
+DELETE /api/memories/{id}
+```
+
+删除是硬删除；冲突槽位通过 `valid_to` / `superseded_by` 保留旧值审计。
+
 ### Token 级上下文预算
 
 `kb/context_budget.py` 提供不需要 tokenizer 的保守估算：
@@ -907,9 +951,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆。
 
-> 当前共 46 项测试，全部通过。
+> 当前共 49 项测试，全部通过。
 
 ---
 

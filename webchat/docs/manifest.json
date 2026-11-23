@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-09",
+      "title": "用户级长期记忆",
+      "date": "2026-11-23",
+      "summary": "新增 user_memories 与 UserMemoryService：用户隔离、规则提取、召回、冲突替代、API 管理。",
+      "record": "iterations/2026-11-23-09.html",
+      "diagrams": [
+        "architecture/2026-11-23-user-memory.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-08",
       "title": "Token 级上下文预算",
       "date": "2026-11-23",
@@ -163,6 +173,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-context-budget.svg",
       "note": "token 估算、优先级打包和工具消息压缩已落地。"
+    },
+    {
+      "id": "2026-11-23-v10",
+      "label": "v10 · User Memory",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-user-memory.svg",
+      "note": "用户级长期记忆已落地；管理 UI 仍待做。"
     }
   ]
 }

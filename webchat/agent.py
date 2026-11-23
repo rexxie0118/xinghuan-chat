@@ -38,6 +38,7 @@ from .runtime.failures import (
 from .runtime.hooks import HookBus, HookContext
 from .sandbox import RunRequest, SandboxRunner
 from .tools import ToolError, ToolRegistry, ToolSpec
+from .user_memory import UserMemoryService
 from .util import new_id
 
 LOG = logging.getLogger("webchat.agent")
@@ -105,11 +106,16 @@ SMALLTALK = re.compile(
 
 class AgentRunner:
     def __init__(
-        self, settings: Settings, sandbox: SandboxRunner, tool_registry: ToolRegistry | None = None
+        self,
+        settings: Settings,
+        sandbox: SandboxRunner,
+        tool_registry: ToolRegistry | None = None,
+        memory_store: UserMemoryService | None = None,
     ) -> None:
         self.settings = settings
         self.sandbox = sandbox
         self.tool_registry = tool_registry
+        self.memory_store = memory_store
         self.hooks: HookBus | None = None
         self.hook_context: HookContext | None = None
         self.external_breaker = CircuitBreaker("external-agent", failure_threshold=3, reset_timeout=30)
@@ -173,6 +179,12 @@ class AgentRunner:
             )
         retrieval_ms = int((time.perf_counter() - started) * 1000)
         self._check_cancel(cancel_token)
+        memories: list[dict[str, Any]] = []
+        if self.memory_store is not None and user.get("id"):
+            try:
+                memories = self.memory_store.recall(user["id"], question, k=5)
+            except Exception as exc:  # noqa: BLE001 - memory is soft context
+                LOG.warning("user memory recall failed: %s", exc)
         self._emit(
             "retrieval_end",
             {
@@ -272,6 +284,20 @@ class AgentRunner:
                 )
             )
 
+        if memories:
+            base_trace.append(
+                _step(
+                    "召回长期记忆",
+                    f"{len(memories)} 条用户记忆；仅作偏好/背景，不作为文档证据",
+                    kind="check",
+                    data={"count": len(memories), "kinds": [m.get("kind") for m in memories]},
+                    logic=(
+                        "用户级记忆按 user_id 隔离，按词法相似度 + importance + recency 排序；"
+                        "只进入软上下文，不参与 [n] 文档引用。"
+                    ),
+                )
+            )
+
         if imported_agent is not None:
             status("运行导入 Agent", f"执行 {imported_agent.entrypoint or '知识库回答'}")
             return self._run_imported(
@@ -281,6 +307,7 @@ class AgentRunner:
                 base_trace=base_trace,
                 kb=kb,
                 history=history,
+                memories=memories,
                 cancel_token=cancel_token,
             )
 
@@ -308,6 +335,7 @@ class AgentRunner:
                 result=result,
                 base_trace=base_trace,
                 kb=kb,
+                memories=memories,
                 status=status,
                 cancel_token=cancel_token,
             )
@@ -318,7 +346,7 @@ class AgentRunner:
         status("生成回答", "基于证据生成引用式回答")
         started = time.perf_counter()
         try:
-            answer = kb.answer(question, result)
+            answer = kb.answer(question, result, memories=memories)
             answer_dict = answer.to_dict()
             answer_dict["answer"] = _clean_extractive(answer_dict.get("answer", ""))
         except Exception as exc:  # noqa: BLE001
@@ -351,7 +379,7 @@ class AgentRunner:
         ):
             status("切换通用回答", "知识库证据不足，使用模型通用知识")
             general_started = time.perf_counter()
-            general = self._general_answer(question, history, kb)
+            general = self._general_answer(question, history, kb, memories=memories)
             if general:
                 general_ms = int((time.perf_counter() - general_started) * 1000)
                 trace = list(base_trace)
@@ -392,6 +420,7 @@ class AgentRunner:
                         "timings": result.get("stats", {}).get("timings", {}),
                         "kb_id": kb.info.id,
                         "kb_name": kb.info.name,
+                        "memory_count": len(memories),
                         "retrieval": {
                             "hits": len(result.get("hits", [])),
                             "entities": len(result.get("graph", {}).get("nodes", [])),
@@ -455,6 +484,7 @@ class AgentRunner:
                 "timings": result.get("stats", {}).get("timings", {}),
                 "kb_id": kb.info.id,
                 "kb_name": kb.info.name,
+                "memory_count": len(memories),
                 "retrieval": {
                     "hits": len(result.get("hits", [])),
                     "entities": len(result.get("graph", {}).get("nodes", [])),
@@ -466,7 +496,10 @@ class AgentRunner:
 
     @staticmethod
     def _general_answer(
-        question: str, history: list[dict[str, str]], kb: KnowledgeService
+        question: str,
+        history: list[dict[str, str]],
+        kb: KnowledgeService,
+        memories: list[dict[str, Any]] | None = None,
     ) -> str:
         history_text = ""
         for message in history[-8:]:
@@ -480,8 +513,14 @@ class AgentRunner:
             "2) 不要编造知识库引用；3) 涉及公司内部、实时数据或不确定的事实时，"
             "明确说明无法确认；4) 用中文简洁回答。"
         )
+        memory_text = ""
+        if memories:
+            memory_text = "用户长期记忆：\n" + "\n".join(
+                f"- [{m.get('kind', 'fact')}] {m.get('content', '')}" for m in memories[:5]
+            ) + "\n"
         user = (
             (f"对话历史：\n{history_text}\n" if history_text else "")
+            + memory_text
             + f"问题：{question}"
         )
         return (kb.provider.chat.complete(system, user, max_tokens=1200) or "").strip()
@@ -494,6 +533,7 @@ class AgentRunner:
         result: dict[str, Any],
         base_trace: list[dict[str, Any]],
         kb: KnowledgeService,
+        memories: list[dict[str, Any]],
         status: Callable[[str, str], None],
         cancel_token: CancellationToken | None,
     ) -> AgentResult | None:
@@ -571,10 +611,15 @@ class AgentRunner:
                 priority=1,
             ),
         ]
+        if memories:
+            memory_text = "用户长期记忆（仅作偏好/背景，不是文档证据）：\n" + "\n".join(
+                f"- [{m.get('kind', 'fact')}] {m.get('content', '')}" for m in memories[:5]
+            )
+            sections.append(Section("memory", memory_text, priority=2))
         if graph_names:
-            sections.append(Section("graph", f"相关实体：{graph_names}", priority=3))
+            sections.append(Section("graph", f"相关实体：{graph_names}", priority=4))
         if history_text:
-            sections.append(Section("history", f"对话历史：\n{history_text}", priority=2))
+            sections.append(Section("history", f"对话历史：\n{history_text}", priority=3))
         user_context, context_report = budget.fit_sections(sections)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system},
@@ -727,6 +772,7 @@ class AgentRunner:
                 "timings": result.get("stats", {}).get("timings", {}),
                 "kb_id": kb.info.id,
                 "kb_name": kb.info.name,
+                "memory_count": len(memories),
                 "context": context_report.public(),
             },
         )
@@ -742,6 +788,7 @@ class AgentRunner:
         base_trace: list[dict[str, Any]],
         kb: KnowledgeService,
         history: list[dict[str, str]],
+        memories: list[dict[str, Any]] | None = None,
         cancel_token: CancellationToken | None = None,
     ) -> AgentResult:
         self._check_cancel(cancel_token)
@@ -1233,9 +1280,15 @@ class AgentRunner:
             text = " ".join((message.get("content") or "").split())
             if text:
                 history_text += f"{role}：{text[:700]}\n"
+        memory_text = ""
+        if memories:
+            memory_text = "用户长期记忆（仅作偏好/背景，不是文档证据）：\n" + "\n".join(
+                f"- [{m.get('kind', 'fact')}] {m.get('content', '')}" for m in memories[:5]
+            ) + "\n\n"
         user = (
             f"用户问题：{question}\n\n"
             + (f"对话历史：\n{history_text}\n" if history_text else "")
+            + memory_text
             + "知识库证据：\n" + "\n\n".join(evidence) + "\n\n"
             + ("请直接输出完整 HTML 文档，不要使用 Markdown 围栏。" if force_html else "请用中文简洁回答，并在句末标注引用编号。")
         )

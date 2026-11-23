@@ -38,6 +38,7 @@ from .sandbox import build_sandbox_runner
 from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
 from .container_workspaces import ContainerWorkspaceService, RuntimeReaper
 from .tools import ToolError, build_tool_registry
+from .user_memory import UserMemoryService
 from .runtime.cancel import ActiveRuns
 from .runtime.failures import RunCancelled, classify_exception
 from .runtime import AgentKernel
@@ -107,6 +108,15 @@ class ToolCallIn(BaseModel):
 
 class AgentTestIn(BaseModel):
     question: str = Field(default="测试执行：请输出 OK", min_length=1, max_length=2000)
+
+
+class MemoryIn(BaseModel):
+    kind: Literal["fact", "preference", "task"] = "fact"
+    content: str = Field(min_length=1, max_length=300)
+    subject: str = Field(default="", max_length=80)
+    predicate: str = Field(default="", max_length=80)
+    object_text: str = Field(default="", max_length=300)
+    importance: float = Field(default=0.7, ge=0, le=1)
 
 
 class RuntimeRestoreIn(BaseModel):
@@ -214,7 +224,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     workspace_service = ContainerWorkspaceService(settings, container_runtime)
     active_runs = ActiveRuns()
     tools = build_tool_registry(settings)
-    runner = AgentRunner(settings, sandbox, tools)
+    memory_store = UserMemoryService(settings.db_path)
+    runner = AgentRunner(settings, sandbox, tools, memory_store=memory_store)
     kernel = AgentKernel(settings, runner)
     plugin_host = load_plugin_host(settings, kernel, tools)
 
@@ -274,6 +285,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.container_runtime = container_runtime
     app.state.workspace_service = workspace_service
     app.state.active_runs = active_runs
+    app.state.user_memory = memory_store
     app.state.runner = runner
     app.state.kernel = kernel
     app.state.tools = tools
@@ -439,6 +451,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "default": default.info.id if default else None,
             "departments": registry.departments,
         }
+
+    @app.get("/api/memories")
+    def list_memories(user: dict[str, Any] = User) -> dict[str, Any]:
+        return {"memories": memory_store.list(user["id"])}
+
+    @app.post("/api/memories")
+    def add_memory(payload: MemoryIn, user: dict[str, Any] = User) -> dict[str, Any]:
+        try:
+            result = memory_store.remember(
+                user["id"],
+                kind=payload.kind,
+                content=payload.content,
+                subject=payload.subject,
+                predicate=payload.predicate,
+                object_text=payload.object_text,
+                importance=payload.importance,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"memory": result, "memories": memory_store.list(user["id"])}
+
+    @app.delete("/api/memories/{memory_id}")
+    def delete_memory(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
+        if not memory_store.forget(user["id"], memory_id):
+            raise HTTPException(status_code=404, detail="记忆不存在")
+        return {"ok": True}
 
     # ------------------------------------------------------------- runtimes
 
@@ -1008,6 +1046,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 user_id=user["id"],
                 first_user_text=content,
             )
+            try:
+                memory_store.extract_and_remember(
+                    user["id"],
+                    content,
+                    conversation_id=conversation_id,
+                    message_id=user_message["id"],
+                )
+            except Exception as exc:  # noqa: BLE001 - memory is optional
+                LOG.warning("memory extract failed: %s", exc)
         finally:
             db.close()
 

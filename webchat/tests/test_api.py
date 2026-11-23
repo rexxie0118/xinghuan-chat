@@ -72,6 +72,24 @@ class ApiTest(unittest.TestCase):
             bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
             self.assertEqual(bad.status_code, 400)
 
+    def test_user_memory_crud(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            created = client.post(
+                "/api/memories",
+                json={"kind": "preference", "content": "回答尽量简洁", "importance": 0.9},
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            memory = created.json()["memory"]
+            self.assertEqual(memory["status"], "created")
+            listed = client.get("/api/memories").json()["memories"]
+            self.assertTrue(any(m["content"] == "回答尽量简洁" for m in listed))
+            deleted = client.delete(f"/api/memories/{memory['id']}")
+            self.assertEqual(deleted.status_code, 200)
+            self.assertFalse(
+                any(m["id"] == memory["id"] for m in client.get("/api/memories").json()["memories"])
+            )
+
     def test_cancel_endpoint_without_active_run(self):
         with TestClient(self.app) as client:
             self.login(client)

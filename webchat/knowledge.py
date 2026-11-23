@@ -234,6 +234,7 @@ class KnowledgeService:
         result: dict[str, Any],
         *,
         history: list[dict[str, str]] | None = None,
+        memories: list[dict[str, Any]] | None = None,
     ):
         """Build the grounded answer. ``result`` is already a JSON-safe dict."""
         conn = self._connection()
@@ -255,7 +256,7 @@ class KnowledgeService:
             rr.entities = result.get("entities", [])
             rr.relations = result.get("relations", [])
             rr.edges = result.get("relations", [])
-            rr.memories = []
+            rr.memories = memories or []
             rr.seeds = result.get("seeds", [])
             rr.warnings = result.get("warnings", [])
             rr.timings = result.get("stats", {}).get("timings", {})
