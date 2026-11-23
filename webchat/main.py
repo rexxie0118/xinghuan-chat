@@ -35,6 +35,7 @@ from .config import Settings
 from .db import connect, init_db
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
+from .sandbox.apple_runtime import AppleContainerRuntime
 from .tools import ToolError, build_tool_registry
 from .runtime import AgentKernel
 from .security import (
@@ -197,6 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     registry = KnowledgeRegistry(settings)
     sandbox = build_sandbox_runner(settings)
+    container_runtime = AppleContainerRuntime(settings)
     runner = AgentRunner(settings, sandbox)
     kernel = AgentKernel(settings, runner)
     tools = build_tool_registry(settings)
@@ -228,6 +230,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.registry = registry
     app.state.kb = registry.get(registry.infos[0].id)
     app.state.sandbox = sandbox
+    app.state.container_runtime = container_runtime
     app.state.runner = runner
     app.state.kernel = kernel
     app.state.tools = tools

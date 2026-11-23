@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="780" viewBox="0 0 1400 780">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#566276"/></marker>
+<pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0 L0 0 0 28" fill="none" stroke="#1a2230"/></pattern></defs>
+<rect width="100%" height="100%" fill="#0b0e14"/><rect width="100%" height="100%" fill="url(#grid)" opacity=".55"/>
+<text x="40" y="36" fill="#e6ebf4" font-size="19" font-weight="600">星环 Chat · 架构图 · Persistent Runtime</text>
+<text x="40" y="56" fill="#566276" font-size="10">solid = 已实现  ·  dashed = planned</text>
+<g><rect x="40" y="90" width="260" height="70" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="54" y="115" fill="#e6ebf4" font-size="14" font-weight="600">Web UI</text>
+<text x="54" y="134" fill="#7c899d" font-size="10">Chat / Agent / Docs</text></g><g><rect x="350" y="90" width="310" height="70" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="364" y="115" fill="#e6ebf4" font-size="14" font-weight="600">FastAPI</text>
+<text x="364" y="134" fill="#7c899d" font-size="10">auth · sessions · SSE · tools</text></g><g><rect x="710" y="90" width="300" height="70" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="724" y="115" fill="#e6ebf4" font-size="14" font-weight="600">AgentKernel</text>
+<text x="724" y="134" fill="#7c899d" font-size="10">hook bus · lifecycle</text></g><g><rect x="1050" y="90" width="300" height="70" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="1064" y="115" fill="#e6ebf4" font-size="14" font-weight="600">AgentRunner</text>
+<text x="1064" y="134" fill="#7c899d" font-size="10">RAG · imported · external</text></g><g><rect x="350" y="225" width="310" height="78" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="364" y="250" fill="#e6ebf4" font-size="14" font-weight="600">AppleContainerRuntime</text>
+<text x="364" y="269" fill="#7c899d" font-size="10">ensure / start / stop / delete</text></g><g><rect x="710" y="225" width="300" height="78" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="724" y="250" fill="#e6ebf4" font-size="14" font-weight="600">SandboxRunner</text>
+<text x="724" y="269" fill="#7c899d" font-size="10">one-shot Agent execution</text></g><g><rect x="1050" y="225" width="300" height="78" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="1064" y="250" fill="#e6ebf4" font-size="14" font-weight="600">Tool Registry</text>
+<text x="1064" y="269" fill="#7c899d" font-size="10">MCP stdio / HTTP</text></g><g><rect x="350" y="375" width="310" height="78" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="364" y="400" fill="#e6ebf4" font-size="14" font-weight="600">xh-rt-<hash></text>
+<text x="364" y="419" fill="#7c899d" font-size="10">per-user container</text></g><g><rect x="350" y="510" width="310" height="70" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="364" y="535" fill="#e6ebf4" font-size="14" font-weight="600">xh-vol-<hash></text>
+<text x="364" y="554" fill="#7c899d" font-size="10">named workspace volume</text></g><g><rect x="710" y="375" width="300" height="78" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="724" y="400" fill="#e6ebf4" font-size="14" font-weight="600">Apple Container VM</text>
+<text x="724" y="419" fill="#7c899d" font-size="10">one-shot / persistent</text></g><g><rect x="710" y="510" width="300" height="70" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="724" y="535" fill="#e6ebf4" font-size="14" font-weight="600">MCP servers</text>
+<text x="724" y="554" fill="#7c899d" font-size="10">external tool boundary</text></g><g><rect x="1050" y="375" width="300" height="95" rx="10" fill="#111722" stroke="#8ca6ff" stroke-opacity=".55" />
+<text x="1064" y="400" fill="#e6ebf4" font-size="14" font-weight="600">RAG + DeepSeek</text>
+<text x="1064" y="419" fill="#7c899d" font-size="10">SQLite knowledge + artifacts</text></g><g><rect x="1050" y="510" width="300" height="70" rx="10" fill="#111722" stroke="#f4c47a" stroke-opacity=".55" stroke-dasharray="6 5"/>
+<text x="1064" y="535" fill="#e6ebf4" font-size="14" font-weight="600">Session mapping</text>
+<text x="1064" y="554" fill="#7c899d" font-size="10">planned: user/session key</text></g><g><rect x="1050" y="620" width="300" height="70" rx="10" fill="#111722" stroke="#f4c47a" stroke-opacity=".55" stroke-dasharray="6 5"/>
+<text x="1064" y="645" fill="#e6ebf4" font-size="14" font-weight="600">Idle reaper</text>
+<text x="1064" y="664" fill="#7c899d" font-size="10">planned: stop / restore</text></g><line x1="300" y1="125" x2="350" y2="125" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="660" y1="125" x2="710" y2="125" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="1010" y1="125" x2="1050" y2="125" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="505" y1="160" x2="505" y2="225" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="860" y1="160" x2="860" y2="225" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="1200" y1="160" x2="1200" y2="225" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="505" y1="303" x2="505" y2="375" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="505" y1="453" x2="505" y2="510" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="860" y1="303" x2="860" y2="375" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="860" y1="453" x2="860" y2="510" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="1200" y1="303" x2="1200" y2="375" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><line x1="1350" y1="470" x2="1350" y2="510" stroke="#566276" stroke-width="1.4" marker-end="url(#arrow)"/><text x="40" y="720" fill="#566276" font-size="11">v3 · 2026-11-23 · persistent Apple Container runtime manager</text><text x="40" y="740" fill="#7c899d" font-size="10">实体：runner 管理 create/start/stop/delete/volume；session mapping 与 idle reaper 仍是 planned。</text>
+</svg>

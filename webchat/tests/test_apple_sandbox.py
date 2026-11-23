@@ -24,7 +24,7 @@ args = args[1:]
 volumes = {{}}
 env = {{}}
 flags = {{"--rm", "--init", "--read-only", "-i"}}
-value_opts = {{"--name", "--cap-drop", "--network", "--cpus", "--memory", "--tmpfs", "--volume", "--workdir", "--env"}}
+value_opts = {{"--name", "--cap-drop", "--network", "--cpus", "--memory", "--tmpfs", "--volume", "--workdir", "--env", "--progress"}}
 i = 0
 while i < len(args):
     arg = args[i]

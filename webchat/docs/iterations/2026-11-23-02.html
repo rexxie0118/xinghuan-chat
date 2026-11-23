@@ -1,0 +1,114 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-23-02</div>
+    <h1>Apple Container 常驻运行时管理器</h1>
+    <p class="lede">
+      新增 AppleContainerRuntime：用确定性 key 管理常驻容器与 named volume，
+      支持 ensure / start / stop / delete / list，为 per-user、per-session 容器铺路。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：28 项通过 + 真机生命周期冒烟</span>
+      <span>架构：v3</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>本迭代完成</h2>
+    <div class="change-grid">
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>确定性命名</h3>
+        <p>key → xh-rt-&lt;hash&gt; / xh-vol-&lt;hash&gt;，避免用户/会话 ID 直接进入容器名。</p>
+        <code>names_for(key)</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>容器生命周期</h3>
+        <p>ensure 自动创建 volume、create、start；stop / delete 可恢复或清理。</p>
+        <code>ensure/start/stop/delete</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>托管发现</h3>
+        <p>通过 xh.managed / xh.key / xh.volume labels 列出受管容器。</p>
+        <code>list_managed()</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>真机冒烟</h2>
+    <pre class="record-pre">ensure('smoke-user')
+→ xh-rt-9bbf17488ebfc5c9 · running
+→ xh-vol-9bbf17488ebfc5c9
+
+stop('smoke-user')
+→ stopped
+
+ensure('smoke-user')
+→ running
+
+delete('smoke-user', delete_volume=True)
+→ container + volume cleaned</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>管理器只负责容器/volume，不负责用户会话状态和 idle 策略。</li>
+      <li>已有 <code>app.state.container_runtime</code>，但还没有接入聊天路径。</li>
+      <li>Apple Container 的 <code>--network none</code> 仍不可用，默认网络需要宿主侧策略。</li>
+      <li>per-user / per-session 映射、预热池、checkpoint 恢复仍是待办。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-23-runtime-manager.svg" alt="v3 persistent runtime manager" />
+      <figcaption>v3：AgentContainerRuntime 管理常驻容器与 volume；session mapping / idle reaper 仍为 planned。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">6 项完成，20 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>完成内部 Plugin API 与 manifest</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>实现真正的 Tool Loop</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>把 runtime key 映射到 user/session，记录 last_active_at，接入 idle stop / checkpoint restore；之后再考虑预热池和并发配额。</p>
+  </section>
+</article>

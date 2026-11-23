@@ -348,10 +348,33 @@ APPLE_CONTAINER_IMAGE=python:3.12-slim \
 
 限制：
 
-- 当前是 **一次性执行容器**，不是前面设计的“每用户常驻容器”；
+- `apple.py` 是一次性执行容器；`apple_runtime.py` 已提供每用户/每 session 常驻容器管理器，但尚未接入聊天路径；
 - Apple Container 官方要求 macOS 26+、Apple silicon；
 - 生产多租户 Linux 环境仍建议 Kubernetes + gVisor/Firecracker；
 - 不要在不可信 Agent 场景使用 `container machine`（它会挂载 home、开放全部 capability）。
+
+### 常驻运行时管理器
+
+`webchat/sandbox/apple_runtime.py` 提供：
+
+```python
+runtime = AppleContainerRuntime(settings)
+runtime.ensure("user:<id>")          # volume + create + start
+runtime.stop("user:<id>")            # 保留容器和 volume
+runtime.ensure("user:<id>")          # 再次 start
+runtime.delete("user:<id>", delete_volume=False)
+runtime.list_managed()
+```
+
+命名是确定性的：
+
+```text
+key → xh-rt-<hash> + xh-vol-<hash>
+```
+
+容器/volume 带 `xh.managed`、`xh.key`、`xh.volume` label，方便清理和恢复。
+
+当前仅在 `app.state.container_runtime` 挂载，**还没有接入聊天请求**；下一步才是 per-user/session 映射和 idle reaper。
 
 ### 执行边界
 
@@ -699,9 +722,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约。
 
-> 当前共 26 项测试，全部通过。
+> 当前共 28 项测试，全部通过。
 
 ---
 
@@ -718,6 +741,7 @@ webchat/
 ├── runtime/                AgentKernel + hook bus + trusted plugin seam
 ├── tools.py                MCP stdio/HTTP client + Tool Registry
 ├── sandbox/apple.py        Apple Container 一次性执行 runner
+├── sandbox/apple_runtime.py Apple Container 常驻容器/volume 管理器
 ├── agent_defs.py           Agent / Skill 导入、解析、存储
 ├── github_importer.py      GitHub 仓库/目录导入（API + URL 校验）
 ├── artifacts.py            运行产物持久化、下载、run 归属校验
