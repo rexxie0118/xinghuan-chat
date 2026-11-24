@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-10",
+      "title": "统一工具结果处理",
+      "date": "2026-11-24",
+      "summary": "MCP/plugin/connector/web 统一返回 content/structured/sources/url；来源归一化并进入引用。",
+      "record": "iterations/2026-11-24-10.html",
+      "diagrams": [
+        "architecture/2026-11-24-unified-tool-result.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-09",
       "title": "外部来源引用",
       "date": "2026-11-24",
@@ -370,6 +380,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-external-citations.svg",
       "note": "外部来源引用已落地；混合 KB/web 引用优先级仍简单。"
+    },
+    {
+      "id": "2026-11-24-v21",
+      "label": "v21 · Unified Tool Result",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-unified-tool-result.svg",
+      "note": "工具结果形状已统一；知识库/外部混合引用仍简单优先外部。"
     }
   ]
 }

@@ -712,6 +712,13 @@ class AgentRunner:
                             )
                         )
                         try:
+                            if tool_result is not None:
+                                for source in getattr(tool_result, "sources", []) or []:
+                                    if not isinstance(source, dict) or not source.get("url"):
+                                        continue
+                                    if any(item.get("url") == source.get("url") for item in external_sources):
+                                        continue
+                                    external_sources.append(dict(source))
                             if tool_result is not None and getattr(tool_result, "url", ""):
                                 source_url = str(tool_result.url)
                                 if not any(item.get("url") == source_url for item in external_sources):

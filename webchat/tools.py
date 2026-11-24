@@ -94,6 +94,7 @@ class ToolResult:
     is_error: bool = False
     structured: Any = None
     url: str = ""
+    sources: list[dict[str, Any]] = field(default_factory=list)
 
     def public(self) -> dict[str, Any]:
         out = {
@@ -108,6 +109,8 @@ class ToolResult:
             out["structured"] = self.structured
         if self.url:
             out["url"] = self.url
+        if self.sources:
+            out["sources"] = self.sources
         return out
 
 
@@ -398,6 +401,56 @@ class HttpMCPClient(MCPClient):
         self._client.close()
 
 
+
+
+def normalize_sources(raw: Any, *, fallback_url: str = "") -> list[dict[str, Any]]:
+    """Normalize MCP/plugin/connector/web sources into one shape."""
+    if not isinstance(raw, dict):
+        return []
+    candidates: list[Any] = []
+    for key in ("sources", "results"):
+        value = raw.get(key)
+        if isinstance(value, list):
+            candidates.extend(value)
+    structured = raw.get("structuredContent") or raw.get("structured")
+    if isinstance(structured, dict):
+        for key in ("sources", "results"):
+            value = structured.get(key)
+            if isinstance(value, list):
+                candidates.extend(value)
+        if structured.get("url"):
+            candidates.append(structured)
+    if raw.get("url"):
+        candidates.append(raw)
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or item.get("link") or "").strip()
+        if not url or not url.startswith(("http://", "https://")) or url in seen:
+            continue
+        seen.add(url)
+        domain = str(item.get("domain") or "")
+        if not domain and "://" in url:
+            domain = url.split("/")[2]
+        title = str(item.get("title") or item.get("name") or domain or url)
+        snippet = str(item.get("snippet") or item.get("text") or item.get("content") or "")[:500]
+        out.append(
+            {
+                "title": title[:300],
+                "url": url[:2000],
+                "snippet": snippet,
+                "published_at": str(item.get("published_at") or "")[:80],
+                "domain": domain[:200],
+                "tier": item.get("tier"),
+                "trust_score": item.get("trust_score"),
+            }
+        )
+        if len(out) >= 8:
+            break
+    return out
+
 def _normalize_content(result: dict[str, Any]) -> tuple[str, Any]:
     content = result.get("content")
     structured = result.get("structuredContent")
@@ -651,6 +704,7 @@ class ToolRegistry:
                 is_error=is_error,
                 structured=structured,
                 url=str(raw.get("url") or ""),
+                sources=normalize_sources(raw, fallback_url=str(raw.get("url") or "")),
             )
         client = self._clients.get(spec.server)
         if client is None:
@@ -684,6 +738,8 @@ class ToolRegistry:
             duration_ms=duration,
             is_error=is_error,
             structured=structured,
+            url=str(raw.get("url") or ""),
+            sources=normalize_sources(raw),
         )
 
     def summary(self) -> dict[str, Any]:

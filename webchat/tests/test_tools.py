@@ -112,6 +112,29 @@ class ToolRegistryTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_plugin_sources_are_normalized(self):
+        registry = ToolRegistry({})
+        registry.register_local(
+            name="demo.web",
+            description="demo",
+            input_schema={"type": "object"},
+            handler=lambda _args: {
+                "content": "ok",
+                "sources": [
+                    {
+                        "title": "官方来源",
+                        "url": "https://www.cma.gov.cn/a",
+                        "snippet": "天气",
+                        "domain": "www.cma.gov.cn",
+                    }
+                ],
+            },
+        )
+        result = registry.call("demo.web", {})
+        self.assertTrue(result.ok)
+        self.assertEqual(result.sources[0]["url"], "https://www.cma.gov.cn/a")
+        self.assertEqual(result.public()["sources"][0]["domain"], "www.cma.gov.cn")
+
     def test_disabled_server_is_reported(self):
         registry = ToolRegistry(
             {"servers": {"off": {"enabled": False, "transport": "stdio", "command": "no"}}}
