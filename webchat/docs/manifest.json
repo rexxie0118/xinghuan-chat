@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-17",
+      "title": "内置 RAG / ImportedAgent / MCP 适配插件",
+      "date": "2026-11-24",
+      "summary": "新增 capability API 和 rag/imported_agent/mcp 三个 system 插件；AgentRunner 优先走 capability，失败回退。",
+      "record": "iterations/2026-11-24-17.html",
+      "diagrams": [
+        "architecture/2026-11-24-builtin-plugins.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-16",
       "title": "可观测性与审计",
       "date": "2026-11-24",
@@ -489,6 +499,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-observability.svg",
       "note": "request id 和 metadata-only 审计已落地；非完整 tracing/metrics 系统。"
+    },
+    {
+      "id": "2026-11-24-v28",
+      "label": "v28 · Builtin Capability Plugins",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-builtin-plugins.svg",
+      "note": "RAG/ImportedAgent/MCP 已有 capability seam 和 core fallback。"
     }
   ]
 }

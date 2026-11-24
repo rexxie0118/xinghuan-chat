@@ -30,7 +30,7 @@ KNOWN_EVENTS = {
     "tool_call",
     "tool_result",
 }
-KNOWN_PERMISSIONS = {"hooks", "tools", "secrets", "network", "dangerous_tools"}
+KNOWN_PERMISSIONS = {"hooks", "tools", "secrets", "network", "dangerous_tools", "capabilities"}
 TRUST_LEVELS = {"system", "trusted", "untrusted"}
 INTERNAL_PREFIX = "webchat.plugins."
 
@@ -107,6 +107,23 @@ class PluginManifest:
 
 
 @dataclass
+class Capability:
+    kind: str
+    name: str
+    handler: Any
+    plugin: str
+    priority: int = 100
+
+    def public(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "name": self.name,
+            "plugin": self.plugin,
+            "priority": self.priority,
+        }
+
+
+@dataclass
 class PluginStatus:
     manifest: PluginManifest
     status: str = "pending"
@@ -124,6 +141,20 @@ class PluginContext:
         self.kernel = host.kernel
         self.logger = logging.getLogger(f"webchat.plugin.{manifest.name}")
         self.data: dict[str, Any] = {}
+        self.services = host.services
+
+    def register_capability(self, kind: str, name: str, handler, *, priority: int = 100) -> None:
+        if "capabilities" not in self.manifest.permissions:
+            raise PermissionError("插件没有 capabilities 权限")
+        if not callable(handler):
+            raise TypeError("capability handler 必须可调用")
+        self.host.register_capability(
+            kind=str(kind),
+            name=str(name),
+            handler=handler,
+            plugin=self.manifest.name,
+            priority=int(priority),
+        )
 
     def on(self, event: str, handler) -> None:
         if event not in KNOWN_EVENTS:
@@ -169,11 +200,19 @@ class PluginContext:
 
 
 class PluginHost:
-    def __init__(self, settings: Any, kernel: Any, tools: Any) -> None:
+    def __init__(
+        self,
+        settings: Any,
+        kernel: Any,
+        tools: Any,
+        services: dict[str, Any] | None = None,
+    ) -> None:
         self.settings = settings
         self.kernel = kernel
         self.tools = tools
+        self.services = services or {}
         self.statuses: list[PluginStatus] = []
+        self.capabilities: dict[str, list[Capability]] = {}
 
     def load(self) -> "PluginHost":
         if not getattr(self.settings, "plugins_enabled", True):
@@ -252,12 +291,70 @@ class PluginHost:
             dangerous=dangerous,
         )
 
+    def load_builtins(self) -> "PluginHost":
+        builtins = [
+            ("rag", "webchat.plugins.rag:plugin"),
+            ("imported_agent", "webchat.plugins.imported_agent:plugin"),
+            ("mcp", "webchat.plugins.mcp:plugin"),
+        ]
+        if any(status.manifest.name == name for name, _ in builtins for status in self.statuses):
+            return self
+        for name, entrypoint in builtins:
+            manifest = PluginManifest(
+                name=name,
+                version="1.0.0",
+                entrypoint=entrypoint,
+                description=f"builtin {name} adapter",
+                trust="system",
+                trusted=True,
+                permissions={"capabilities"},
+            )
+            status = PluginStatus(manifest)
+            self.statuses.append(status)
+            try:
+                self._load_one(manifest)
+                status.status = "loaded"
+            except Exception as exc:  # noqa: BLE001
+                status.status = "error"
+                status.error = f"{type(exc).__name__}: {exc}"
+                LOG.warning("builtin plugin %s failed: %s", name, exc)
+        return self
+
+    def register_capability(
+        self,
+        *,
+        kind: str,
+        name: str,
+        handler,
+        plugin: str,
+        priority: int = 100,
+    ) -> None:
+        self.capabilities.setdefault(kind, []).append(
+            Capability(kind=kind, name=name, handler=handler, plugin=plugin, priority=priority)
+        )
+        self.capabilities[kind].sort(key=lambda item: item.priority)
+
+    def get_capability(self, kind: str, name: str | None = None):
+        items = self.capabilities.get(kind) or []
+        for item in items:
+            if name is None or item.name == name:
+                return item
+        return None
+
     def summary(self) -> dict[str, Any]:
         return {
             "enabled": bool(self.statuses),
             "plugins": [s.public() for s in self.statuses],
+            "capabilities": [
+                item.public() for items in self.capabilities.values() for item in items
+            ],
         }
 
 
-def load_plugin_host(settings: Any, kernel: Any, tools: Any) -> PluginHost:
-    return PluginHost(settings, kernel, tools).load()
+def load_plugin_host(
+    settings: Any,
+    kernel: Any,
+    tools: Any,
+    services: dict[str, Any] | None = None,
+) -> PluginHost:
+    return PluginHost(settings, kernel, tools, services=services).load()

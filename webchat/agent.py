@@ -117,6 +117,7 @@ class AgentRunner:
         self.sandbox = sandbox
         self.tool_registry = tool_registry
         self.memory_store = memory_store
+        self.plugin_host = None
         self.hooks: HookBus | None = None
         self.hook_context: HookContext | None = None
         self.external_breaker = CircuitBreaker("external-agent", failure_threshold=3, reset_timeout=30)
@@ -124,6 +125,22 @@ class AgentRunner:
     def attach_hooks(self, hooks: HookBus, context: HookContext) -> None:
         self.hooks = hooks
         self.hook_context = context
+
+    def attach_plugin_host(self, host) -> None:
+        self.plugin_host = host
+        if self.tool_registry is None:
+            cap = getattr(host, "get_capability", lambda *_args: None)("tool_provider", "mcp")
+            if cap is not None:
+                self.tool_registry = cap.handler(
+                    {"tools": getattr(host, "services", {}).get("tools")}
+                )
+
+    def _capability(self, kind: str, name: str):
+        host = self.plugin_host
+        if host is None:
+            return None
+        getter = getattr(host, "get_capability", None)
+        return getter(kind, name) if getter else None
 
     def _emit(self, event: str, payload: dict[str, Any]) -> None:
         if self.hooks is not None and self.hook_context is not None:
@@ -349,7 +366,19 @@ class AgentRunner:
         status("生成回答", "基于证据生成引用式回答")
         started = time.perf_counter()
         try:
-            answer = kb.answer(question, result, memories=memories)
+            rag_engine = self._capability("rag", "answer")
+            if rag_engine is not None:
+                answer = rag_engine.handler(
+                    {
+                        "question": question,
+                        "result": result,
+                        "kb": kb,
+                        "history": history,
+                        "memories": memories,
+                    }
+                )
+            else:
+                answer = kb.answer(question, result, memories=memories)
             answer_dict = answer.to_dict()
             answer_dict["answer"] = _clean_extractive(answer_dict.get("answer", ""))
         except Exception as exc:  # noqa: BLE001
@@ -843,7 +872,18 @@ class AgentRunner:
 
     # ------------------------------------------------------------- imported
 
-    def _run_imported(
+    def _run_imported(self, **kwargs) -> AgentResult:
+        cap = self._capability("agent", "imported")
+        if cap is not None:
+            try:
+                return cap.handler({"runner": self, "kwargs": kwargs})
+            except RunCancelled:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("imported agent capability failed, falling back: %s", exc)
+        return self._run_imported_impl(**kwargs)
+
+    def _run_imported_impl(
         self,
         *,
         agent: ImportedAgent,

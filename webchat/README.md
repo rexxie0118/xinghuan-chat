@@ -1282,8 +1282,19 @@ cp webchat/plugins.example.json webchat/plugins.json
 - `ctx.on(event, handler)`：订阅生命周期；
 - `ctx.register_tool(...)`：注册 `plugin.<name>.<tool>`；
 - `ctx.secret(name)`：只读取 manifest 声明的环境变量；
+- `ctx.register_capability(...)`：注册内置能力（RAG / imported Agent / MCP provider）；
 - 默认只允许 `webchat.plugins.*`；
 - 没有热加载；重启生效。
+
+内置系统插件：
+
+```text
+rag              rag.answer capability
+imported_agent   agent.imported capability
+mcp              tool_provider.mcp capability
+```
+
+这些插件由 `PluginHost.load_builtins()` 自动加载，status 为 `system`。
 
 权限：
 

@@ -275,7 +275,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     memory_store = UserMemoryService(settings.db_path)
     runner = AgentRunner(settings, sandbox, tools, memory_store=memory_store)
     kernel = AgentKernel(settings, runner)
-    plugin_host = load_plugin_host(settings, kernel, tools)
+    plugin_host = load_plugin_host(
+        settings, kernel, tools, services={"tools": tools}
+    )
+    plugin_host.load_builtins()
+    runner.attach_plugin_host(plugin_host)
     job_queue = None
     if settings.queue_url:
         job_queue = RedisJobQueue(settings.queue_url, name=settings.queue_name)
