@@ -142,6 +142,21 @@ SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_memories_user ON user_memories(user_id, valid_to, last_used_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS connectors (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name        TEXT NOT NULL UNIQUE,
+        description TEXT NOT NULL DEFAULT '',
+        spec_json   TEXT NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'draft',
+        source      TEXT NOT NULL DEFAULT 'manual',
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        approved_at TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_connectors_user ON connectors(user_id, updated_at DESC)",
 ]
 
 

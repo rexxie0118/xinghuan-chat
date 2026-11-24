@@ -14,6 +14,8 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Literal
 from urllib.parse import quote, urlparse
 
+import httpx
+
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +37,7 @@ from .agent_defs import (
 from .github_importer import GitHubImportError, import_from_github
 from .jobs import RedisJobQueue, new_job
 from .concurrency import ConcurrencyGate, QueueFullError, QueueTimeoutError
+from .connectors import ConnectorError, ConnectorService, known_for, parse_spec, propose_with_llm
 from .config import Settings
 from .db import connect, init_db, is_integrity_error
 from .knowledge import KnowledgeRegistry, KnowledgeService
@@ -122,6 +125,18 @@ class MemoryIn(BaseModel):
     predicate: str = Field(default="", max_length=80)
     object_text: str = Field(default="", max_length=300)
     importance: float = Field(default=0.7, ge=0, le=1)
+
+
+class ConnectorIn(BaseModel):
+    spec: dict[str, Any]
+
+
+class ConnectorProposeIn(BaseModel):
+    query: str = Field(min_length=1, max_length=800)
+
+
+class ConnectorTestIn(BaseModel):
+    arguments: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobIn(BaseModel):
@@ -245,6 +260,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run_timeout=settings.run_timeout,
     )
     tools = build_tool_registry(settings)
+    connector_service = ConnectorService(settings, tools)
+    try:
+        connector_service.load_approved()
+    except Exception as exc:  # noqa: BLE001
+        LOG.warning("connector load failed: %s", exc)
     memory_store = UserMemoryService(settings.db_path)
     runner = AgentRunner(settings, sandbox, tools, memory_store=memory_store)
     kernel = AgentKernel(settings, runner)
@@ -322,6 +342,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.runner = runner
     app.state.kernel = kernel
     app.state.tools = tools
+    app.state.connector_service = connector_service
     app.state.plugin_host = plugin_host
     app.state.job_queue = job_queue
 
@@ -607,6 +628,78 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if container_pool is None:
             return {"enabled": False}
         return container_pool.status()
+
+    @app.get("/api/connectors/catalog")
+    def connector_catalog(user: dict[str, Any] = User) -> dict[str, Any]:
+        from .connectors import KNOWN_CONNECTORS
+        return {"connectors": KNOWN_CONNECTORS}
+
+    @app.get("/api/connectors")
+    def list_connectors(user: dict[str, Any] = User) -> dict[str, Any]:
+        return {"connectors": connector_service.store.list(user["id"])}
+
+    @app.post("/api/connectors/propose")
+    def propose_connector(
+        payload: ConnectorProposeIn, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        known = known_for(payload.query)
+        if known:
+            return {"source": "known", "specs": known}
+        default_service = registry.get(registry.infos[0].id)
+        try:
+            spec = propose_with_llm(default_service.provider.chat, payload.query)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"模型生成连接器失败：{exc}") from exc
+        return {"source": "llm", "spec": spec}
+
+    @app.post("/api/connectors")
+    def create_connector(payload: ConnectorIn, user: dict[str, Any] = User) -> dict[str, Any]:
+        try:
+            spec = parse_spec(payload.spec)
+            connector = connector_service.store.create(user["id"], spec, source="draft")
+        except ConnectorError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"connector": connector}
+
+    @app.post("/api/connectors/{connector_id}/test")
+    def test_connector(
+        connector_id: str,
+        payload: ConnectorTestIn,
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        connector = connector_service.store.get(connector_id)
+        if connector is None or connector["user_id"] != user["id"]:
+            raise HTTPException(status_code=404, detail="连接器不存在")
+        try:
+            spec = parse_spec(connector["spec"])
+            result = connector_service.executor.execute(spec, payload.arguments)
+        except (ConnectorError, httpx.HTTPError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"result": result}
+
+    @app.post("/api/connectors/{connector_id}/approve")
+    def approve_connector(
+        connector_id: str, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        connector = connector_service.store.get(connector_id)
+        if connector is None or connector["user_id"] != user["id"]:
+            raise HTTPException(status_code=404, detail="连接器不存在")
+        try:
+            spec = parse_spec(connector["spec"])
+            connector_service.register(spec)
+        except ConnectorError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        updated = connector_service.store.approve(connector_id, user["id"])
+        return {"connector": updated, "tool": spec.tool_name}
+
+    @app.post("/api/connectors/{connector_id}/reject")
+    def reject_connector(
+        connector_id: str, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        connector = connector_service.store.get(connector_id)
+        if connector is None or connector["user_id"] != user["id"]:
+            raise HTTPException(status_code=404, detail="连接器不存在")
+        return {"connector": connector_service.store.reject(connector_id, user["id"])}
 
     # ------------------------------------------------------------- runtimes
 

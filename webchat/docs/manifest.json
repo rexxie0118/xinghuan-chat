@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-04",
+      "title": "声明式联网连接器",
+      "date": "2026-11-24",
+      "summary": "新增 Connector Factory：catalog、声明式 HTTP spec、校验、测试、审批和 ToolRegistry 注册。",
+      "record": "iterations/2026-11-24-04.html",
+      "diagrams": [
+        "architecture/2026-11-24-connector-factory.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-03",
       "title": "Apple Container 预热池与并发配额",
       "date": "2026-11-24",
@@ -275,6 +285,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-apple-pool.svg",
       "note": "预热池与配额已落地；一次性 Agent runner 迁移仍待做。"
+    },
+    {
+      "id": "2026-11-24-v16",
+      "label": "v16 · Connector Factory",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-connector-factory.svg",
+      "note": "声明式连接器已落地；无连接器管理 UI。"
     }
   ]
 }

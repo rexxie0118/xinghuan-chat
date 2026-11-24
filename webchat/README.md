@@ -508,6 +508,50 @@ GET /api/containers/pool
 
 ---
 
+## 4.5 声明式联网连接器
+
+联网不走「模型临时生成 Python」这条路，而是：
+
+```text
+需求
+→ 查已知连接器 catalog
+→ 生成/填写声明式 spec
+→ 校验 host/参数/auth
+→ test 沙箱请求
+→ approve
+→ 注册为 connector.<name>
+→ Agent Tool Loop 调用
+```
+
+API：
+
+```http
+GET  /api/connectors/catalog
+GET  /api/connectors
+POST /api/connectors/propose       {query}
+POST /api/connectors               {spec}
+POST /api/connectors/{id}/test     {arguments}
+POST /api/connectors/{id}/approve
+POST /api/connectors/{id}/reject
+```
+
+内置 catalog 包含 Open-Meteo：
+
+```text
+weather_geocode
+weather_current
+```
+
+限制：
+
+- 只允许 HTTPS；
+- `allow_hosts` 必须包含目标 host；
+- 只允许 GET / POST；
+- 不允许代码生成；
+- `auth` 只引用环境变量名，spec 不存 secret；
+- 响应最大 256KB；
+- 审批后才注册到 ToolRegistry。
+
 ## 5. MCP 工具注册表
 
 MVP 已加在 `webchat/tools.py`，不依赖额外 MCP SDK：
