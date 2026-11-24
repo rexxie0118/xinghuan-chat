@@ -1,0 +1,140 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-29</div>
+    <h1>SQLite → PostgreSQL 全量迁移</h1>
+    <p class="lede">
+      新增 pg_migrate：按外键顺序复制控制面 13 张表；支持 dry-run、upsert/skip、
+      行数校验。知识库 FTS/向量仍保留 SQLite，不在本次迁移范围。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：114 项通过</span>
+      <span>架构：v40</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>迁移范围</h2>
+    <pre class="record-pre">users / sessions
+conversations / messages
+agents / agent_runs
+user_runtimes / container_workspaces / container_checkpoints
+user_memories / connectors / audit_events / department_agents</pre>
+  </section>
+
+  <section>
+    <h2>使用</h2>
+    <pre class="record-pre">python -m webchat.pg_migrate \
+  --sqlite webchat/data/webchat.sqlite3 \
+  --dry-run
+
+WEBCHAT_DB_URL=postgresql://... \
+python -m webchat.pg_migrate \
+  --sqlite webchat/data/webchat.sqlite3 \
+  --verify</pre>
+  </section>
+
+  <section>
+    <h2>行为</h2>
+    <pre class="record-pre">init_db → 创建/升级 Postgres schema
+按 FK 顺序复制
+默认 ON CONFLICT DO UPDATE
+--mode skip → DO NOTHING
+--verify → 目标行数不少于源
+不打印 DSN/密码</pre>
+  </section>
+
+  <section>
+    <h2>兼容修复</h2>
+    <ul>
+      <li>用户名查询从 COLLATE NOCASE 改为 LOWER()；</li>
+      <li>记忆 MAX(a,b) 改为 CASE WHEN；</li>
+      <li>SCHEMA 补齐 user_memories 的 scope/agent/authority 字段；</li>
+      <li>安装 psycopg[binary] 用于迁移。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">dry-run 读取当前 SQLite：
+  13 张表
+  来源行数统计正常
+
+copy loop 使用 fake destination 验证
+upsert/skip SQL 生成
+114 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>没有本地真实 PostgreSQL 实例，未做 live migration；</li>
+      <li>知识库 kb_*.sqlite3 的 FTS/向量不迁移；</li>
+      <li>迁移期间应停写，避免 SQLite 增量丢失；</li>
+      <li>没有自动回滚/双写；</li>
+      <li>JSON/时间字段仍按 TEXT 存储。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-postgres-migration.svg" alt="v40 Postgres migration" />
+      <figcaption>v40：SQLite 控制面 → Postgres 全量复制。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">44 项完成，0 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>声明式联网连接器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>连接器管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Chat 模式联网开关</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Web Research 工具链</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部来源引用</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>评测集与失败注入</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>部门 RBAC + 默认 Agent/KB</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>用户权限管理界面</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>知识库文档管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>PPTX / Excel 解析与入库</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>记忆质量：写入门槛 / 合并 / 预算 / 整理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 scope / provenance / audit</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>共享记忆审批 / 审计回滚 / 后台整理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>记忆评测集</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>语义合并</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P3</td><td>团队 / 多 Agent 记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P4</td><td>团队管理页 / per-Agent 所有权 / 语义冲突</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P4</td><td>SQLite → PostgreSQL 全量迁移</td><td><span class="status done">完成</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

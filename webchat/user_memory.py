@@ -221,9 +221,10 @@ class UserMemoryService:
                         continue
                     conn.execute(
                         "UPDATE user_memories SET hits=hits+1, last_used_at=?, updated_at=?,"
-                        " importance=MAX(importance, ?), confidence=MAX(confidence, ?)"
+                        " importance=CASE WHEN importance > ? THEN importance ELSE ? END,"
+                        " confidence=CASE WHEN confidence > ? THEN confidence ELSE ? END"
                         " WHERE id=?",
-                        (now, now, float(importance), float(confidence), row["id"]),
+                        (now, now, float(importance), float(importance), float(confidence), float(confidence), row["id"]),
                     )
                     return {"status": "duplicate", "id": row["id"], "snapshot": dict(row)}
 

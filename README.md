@@ -59,6 +59,7 @@ python3 -m venv .venv
 - 语义合并：LLM 判定同义记忆
 - 团队记忆：成员提交、角色视图、权威性冲突
 - 团队记忆管理页 / per-Agent 所有权 / 语义冲突
+- Postgres 控制面全量迁移：`python -m webchat.pg_migrate`
 - 知识库文档管理：上传/删除/重建索引
 - Office 解析：PDF/DOCX/PPTX/XLSX/XLS
 - Apple Container 预热池：warm/lease/quota

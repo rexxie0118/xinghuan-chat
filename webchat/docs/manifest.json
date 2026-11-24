@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-29",
+      "title": "SQLite → PostgreSQL 全量迁移",
+      "date": "2026-11-24",
+      "summary": "pg_migrate 复制控制面 13 张表；dry-run/upsert/skip/verify；KB SQLite 不迁移。",
+      "record": "iterations/2026-11-24-29.html",
+      "diagrams": [
+        "architecture/2026-11-24-postgres-migration.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-28",
       "title": "团队记忆管理页 / per-Agent 所有权 / 语义冲突",
       "date": "2026-11-24",
@@ -693,6 +703,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-team-admin.svg",
       "note": "团队管理页、per-Agent 所有权、语义冲突已落地；时间 KG/多模态未做。"
+    },
+    {
+      "id": "2026-11-24-v40",
+      "label": "v40 · PostgreSQL Migration",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-postgres-migration.svg",
+      "note": "控制面全量迁移脚本已落地；无 live Postgres 验证。"
     }
   ]
 }

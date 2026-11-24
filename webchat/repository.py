@@ -54,7 +54,7 @@ def find_user_by_username(
     conn: sqlite3.Connection, username: str
 ) -> sqlite3.Row | None:
     return conn.execute(
-        "SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,)
+        "SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (username,)
     ).fetchone()
 
 

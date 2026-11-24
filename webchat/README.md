@@ -1116,6 +1116,51 @@ WEBCHAT_OBJECT_STORE=s3      # S3 / MinIO / R2 兼容
 
 知识库检索库仍是 SQLite 文件；Postgres 当前用于 WebChat 控制面。完整容器化示例见 `docker-compose.yml`。
 
+### SQLite → PostgreSQL 全量迁移
+
+迁移脚本覆盖控制面全部表：
+
+```text
+users / sessions / conversations / messages
+agents / agent_runs
+user_runtimes / container_workspaces / container_checkpoints
+user_memories / connectors / audit_events / department_agents
+```
+
+先备份：
+
+```bash
+cp webchat/data/webchat.sqlite3 webchat/data/webchat.sqlite3.bak
+```
+
+干跑：
+
+```bash
+python -m webchat.pg_migrate   --sqlite webchat/data/webchat.sqlite3   --dry-run
+```
+
+迁移：
+
+```bash
+WEBCHAT_DB_URL=postgresql://xinghuan:change-me@127.0.0.1:5432/xinghuan python -m webchat.pg_migrate   --sqlite webchat/data/webchat.sqlite3   --verify
+```
+
+模式：
+
+```text
+默认 upsert：按主键更新
+--mode skip：保留目标已有行
+--verify：迁移后检查目标行数不少于源
+```
+
+切换：
+
+```dotenv
+WEBCHAT_DB_URL=postgresql://xinghuan:change-me@127.0.0.1:5432/xinghuan
+```
+
+重启 Web/Worker。迁移脚本不会迁移知识库 `kb_*.sqlite3` 的 FTS/向量索引。
+
 ### 并发准入与背压
 
 内容入口现在经过 `ConcurrencyGate`：
@@ -1644,7 +1689,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 111 项测试，全部通过。
+> 当前共 114 项测试，全部通过。
 
 ---
 

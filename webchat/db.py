@@ -139,6 +139,16 @@ SCHEMA = [
         valid_from             TEXT NOT NULL DEFAULT '',
         updated_at             TEXT NOT NULL,
         last_used_at           TEXT NOT NULL,
+        scope                  TEXT NOT NULL DEFAULT 'personal',
+        scope_id               TEXT NOT NULL DEFAULT '',
+        agent_id               TEXT NOT NULL DEFAULT '',
+        source_uri             TEXT NOT NULL DEFAULT '',
+        evidence_snippet       TEXT NOT NULL DEFAULT '',
+        created_by             TEXT NOT NULL DEFAULT '',
+        status                 TEXT NOT NULL DEFAULT 'active',
+        approved_by            TEXT NOT NULL DEFAULT '',
+        approved_at            TEXT NOT NULL DEFAULT '',
+        authority              INTEGER NOT NULL DEFAULT 0,
         valid_to               TEXT,
         superseded_by          TEXT NOT NULL DEFAULT ''
     )
