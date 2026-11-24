@@ -177,7 +177,10 @@ class ConnectorExecutor:
             else:
                 resp = client.get(url, params=query, headers=headers)
             if resp.status_code >= 400:
-                raise ConnectorError(f"HTTP {resp.status_code}")
+                detail = (resp.text or "").strip()[:300]
+                raise ConnectorError(
+                    f"HTTP {resp.status_code}" + (f"：{detail}" if detail else "")
+                )
             content = resp.content
             if len(content) > MAX_RESPONSE_BYTES:
                 raise ConnectorError("响应超过 256KB 限制")
@@ -281,6 +284,23 @@ class ConnectorStore:
         finally:
             conn.close()
 
+    def update_spec(self, connector_id: str, spec: ConnectorSpec) -> None:
+        conn = self._conn()
+        try:
+            with conn:
+                conn.execute(
+                    "UPDATE connectors SET description=?, spec_json=?, updated_at=?"
+                    " WHERE id=?",
+                    (
+                        spec.description,
+                        json.dumps(spec.public(), ensure_ascii=False),
+                        iso(),
+                        connector_id,
+                    ),
+                )
+        finally:
+            conn.close()
+
     def approve(self, connector_id: str, user_id: str) -> dict[str, Any] | None:
         conn = self._conn()
         try:
@@ -324,7 +344,20 @@ class ConnectorService:
         self.store = ConnectorStore(settings.db_path)
         self.executor = ConnectorExecutor()
 
+    def reconcile_known(self) -> None:
+        known = {item["name"]: item for item in KNOWN_CONNECTORS}
+        for item in self.store.list():
+            if item.get("name") not in known or item.get("status") != "approved":
+                continue
+            try:
+                spec = parse_spec(known[item["name"]])
+                if item.get("spec") != spec.public():
+                    self.store.update_spec(item["id"], spec)
+            except Exception:  # noqa: BLE001
+                continue
+
     def load_approved(self) -> int:
+        self.reconcile_known()
         count = 0
         for item in self.store.list():
             if item.get("status") != "approved":
@@ -357,7 +390,13 @@ KNOWN_CONNECTORS: list[dict[str, Any]] = [
         "base_url": "https://geocoding-api.open-meteo.com/v1",
         "method": "GET",
         "path": "/search",
-        "params": {"city": {"type": "string", "description": "城市名"}},
+        "params": {
+            "city": {
+                "type": "string",
+                "description": "城市名",
+                "key": "name",
+            }
+        },
         "fixed": {"count": 1, "language": "zh", "format": "json"},
         "response_path": "results",
         "allow_hosts": ["geocoding-api.open-meteo.com"],

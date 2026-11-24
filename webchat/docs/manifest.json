@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-06",
+      "title": "修复 weather_geocode 400",
+      "date": "2026-11-24",
+      "summary": "Open-Meteo Geocoding 参数应为 name；修正 known spec，启动时迁移已审批连接器，并保留 provider 错误详情。",
+      "record": "iterations/2026-11-24-06.html",
+      "diagrams": [
+        "architecture/2026-11-24-connector-ui.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-05",
       "title": "连接器管理 UI",
       "date": "2026-11-24",

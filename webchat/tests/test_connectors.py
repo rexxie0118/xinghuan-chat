@@ -94,6 +94,7 @@ class ConnectorTest(unittest.TestCase):
             service.register(spec)
             self.assertIn("connector.demo_weather", [t.name for t in tools.list_tools()])
             self.assertEqual(known_for("天气")[0]["name"], "weather_geocode")
+            self.assertEqual(known_for("天气")[0]["params"]["city"]["key"], "name")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
