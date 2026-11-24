@@ -61,6 +61,7 @@ python3 -m venv .venv
 - 团队记忆管理页 / per-Agent 所有权 / 语义冲突
 - Postgres 控制面全量迁移：`python -m webchat.pg_migrate`
 - Redis 实例 / Worker 队列：`WEBCHAT_QUEUE_URL`
+- 知识库统一到 PostgreSQL（kb_id + RLS）
 - 时间线记忆图谱 + 多模态附件归档
 - 知识库文档管理：上传/删除/重建索引
 - Office 解析：PDF/DOCX/PPTX/XLSX/XLS

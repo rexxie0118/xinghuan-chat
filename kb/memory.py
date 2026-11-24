@@ -86,9 +86,9 @@ class MemoryStore:
         existing = self.conn.execute("SELECT * FROM memories WHERE id=?", (memory_id,)).fetchone()
         if existing is not None:
             self.conn.execute(
-                "UPDATE memories SET hits=hits+1, last_access_at=?, importance=MAX(importance,?)"
+                "UPDATE memories SET hits=hits+1, last_access_at=?, importance=CASE WHEN importance > ? THEN importance ELSE ? END"
                 " WHERE id=?",
-                (ts, importance, memory_id),
+                (ts, importance, importance, memory_id),
             )
             return {"status": "duplicate", "id": memory_id, "superseded": []}
 
@@ -153,9 +153,9 @@ class MemoryStore:
             if same_value or sim >= dedup:
                 # 同一件事的另一种说法：并入旧记忆，不新增
                 self.conn.execute(
-                    "UPDATE memories SET hits=hits+1, last_access_at=?, confidence=MAX(confidence,?)"
+                    "UPDATE memories SET hits=hits+1, last_access_at=?, confidence=CASE WHEN confidence > ? THEN confidence ELSE ? END"
                     " WHERE id=?",
-                    (ts, cand["confidence"], cand["id"]),
+                    (ts, cand["confidence"], cand["confidence"], cand["id"]),
                 )
                 superseded.append(cand["id"])
                 continue

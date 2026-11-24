@@ -122,6 +122,22 @@ class Retriever:
 
     def _fts_search(self, query: str, k: int) -> list[tuple[str, float]]:
         terms = keyword_terms(query, min_len=2, limit=24)
+        if getattr(self.conn, "is_postgres", False):
+            seen: set[str] = set()
+            out: list[tuple[str, float]] = []
+            for term in [t for t in terms if len(t) >= 2][:8]:
+                rows = self.conn.execute(
+                    "SELECT id FROM chunks WHERE text ILIKE ? LIMIT ?",
+                    (f"%{term}%", k - len(out)),
+                ).fetchall()
+                for row in rows:
+                    if row["id"] in seen:
+                        continue
+                    seen.add(row["id"])
+                    out.append((row["id"], 1.0))
+                if len(out) >= k:
+                    break
+            return out[:k]
         out: list[tuple[str, float]] = []
         seen: set[str] = set()
         fts_terms = [t for t in terms if len(t) >= 3]  # trigram 至少 3 字符

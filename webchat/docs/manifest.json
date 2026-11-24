@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-34",
+      "title": "知识库统一到 PostgreSQL",
+      "date": "2026-11-24",
+      "summary": "四个 KB 迁移到共享 PG 表；kb_id + composite PK + RLS；文档/分块/向量/本体/记忆全量复制。",
+      "record": "iterations/2026-11-24-34.html",
+      "diagrams": [
+        "architecture/2026-11-24-kb-postgres.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-33",
       "title": "入口收进账号菜单",
       "date": "2026-11-24",
@@ -778,6 +788,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-user-menu.svg",
       "note": "入口折叠到账号菜单；顶栏只保留模式、引擎和知识面板。"
+    },
+    {
+      "id": "2026-11-24-v45",
+      "label": "v45 · Unified KB",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-kb-postgres.svg",
+      "note": "KB 已迁 PG；向量仍 BYTEA/暴力余弦，pgvector HNSW 待接。"
     }
   ]
 }

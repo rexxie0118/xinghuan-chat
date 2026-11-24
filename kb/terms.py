@@ -57,10 +57,10 @@ class TermsStore:
             self.conn.execute(
                 """UPDATE terms SET description=COALESCE(NULLIF(?,''), description),
                        synonyms_json=?, entity_id=COALESCE(?, entity_id),
-                       certified=MAX(certified, ?), updated_at=?
+                       certified=CASE WHEN certified > ? THEN certified ELSE ? END, updated_at=?
                    WHERE id=?""",
                 (description, json.dumps(list(synonyms), ensure_ascii=False),
-                 entity_id, int(bool(certified)), now, row["id"]),
+                 entity_id, int(bool(certified)), int(bool(certified)), now, row["id"]),
             )
             term_id = row["id"]
         else:

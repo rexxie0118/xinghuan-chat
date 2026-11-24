@@ -1,4 +1,4 @@
-"""SQLite 存储层：建表、连接、元数据。
+"""KB storage: SQLite default + PostgreSQL shared tables (kb_id + RLS).
 
 只用一个文件（默认 data/kb.sqlite3）承载三类数据：
     文档/分块 + 向量 + FTS   → RAG 检索
@@ -11,8 +11,10 @@ MVP 阶段选择 SQLite 而不是“向量库 + 图库 + 文档库”三件套�
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from .util import iso
 
@@ -72,7 +74,7 @@ SCHEMA: list[str] = [
         domain TEXT NOT NULL DEFAULT '',
         range TEXT NOT NULL DEFAULT '',
         description TEXT NOT NULL DEFAULT '',
-        symmetric INTEGER NOT NULL DEFAULT 0,
+        "symmetric" INTEGER NOT NULL DEFAULT 0,
         is_core INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL
     )""",
@@ -187,6 +189,230 @@ SCHEMA: list[str] = [
     )""",
 ]
 
+
+
+# PostgreSQL schema. One database, one shared table set, scoped by kb_id.
+# RLS makes all existing queries kb-isolated without rewriting every SQL.
+PG_SCHEMA: list[str] = [
+    """CREATE TABLE IF NOT EXISTS meta (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY(kb_id, key)
+    )""",
+    """CREATE TABLE IF NOT EXISTS documents (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        source_uri TEXT NOT NULL,
+        title TEXT NOT NULL,
+        doc_type TEXT NOT NULL DEFAULT 'note',
+        content TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        meta_json TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY(kb_id, id)
+    )""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_kb_uri ON documents(kb_id, source_uri)",
+    "CREATE INDEX IF NOT EXISTS idx_documents_kb_hash ON documents(kb_id, content_hash)",
+    """CREATE TABLE IF NOT EXISTS chunks (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        doc_id TEXT NOT NULL,
+        ord INTEGER NOT NULL,
+        heading_path TEXT NOT NULL DEFAULT '',
+        text TEXT NOT NULL,
+        char_start INTEGER NOT NULL DEFAULT 0,
+        char_end INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, id),
+        FOREIGN KEY(kb_id, doc_id) REFERENCES documents(kb_id, id) ON DELETE CASCADE
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_chunks_kb_doc ON chunks(kb_id, doc_id, ord)",
+    """CREATE TABLE IF NOT EXISTS chunk_fts (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        text TEXT NOT NULL,
+        chunk_id TEXT NOT NULL,
+        doc_id TEXT NOT NULL,
+        PRIMARY KEY(kb_id, chunk_id)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_chunk_fts_kb_text ON chunk_fts USING gin (text gin_trgm_ops)",
+    """CREATE TABLE IF NOT EXISTS vectors (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        owner_kind TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        model TEXT NOT NULL,
+        dim INTEGER NOT NULL,
+        vec BYTEA NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, owner_kind, owner_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS entity_types (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        name TEXT NOT NULL,
+        parent TEXT,
+        description TEXT NOT NULL DEFAULT '',
+        is_core INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS relation_types (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        name TEXT NOT NULL,
+        domain TEXT NOT NULL DEFAULT '',
+        range TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        "symmetric" INTEGER NOT NULL DEFAULT 0,
+        is_core INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS entities (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        type_name TEXT NOT NULL,
+        name TEXT NOT NULL,
+        name_norm TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        props_json TEXT NOT NULL DEFAULT '{}',
+        confidence REAL NOT NULL DEFAULT 0.7,
+        mention_count INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, id)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_entities_kb_type ON entities(kb_id, type_name)",
+    "CREATE INDEX IF NOT EXISTS idx_entities_kb_norm ON entities(kb_id, name_norm)",
+    """CREATE TABLE IF NOT EXISTS entity_aliases (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        entity_id TEXT NOT NULL,
+        alias TEXT NOT NULL,
+        alias_norm TEXT NOT NULL,
+        PRIMARY KEY(kb_id, alias_norm, entity_id),
+        FOREIGN KEY(kb_id, entity_id) REFERENCES entities(kb_id, id) ON DELETE CASCADE
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_aliases_kb_norm ON entity_aliases(kb_id, alias_norm)",
+    """CREATE TABLE IF NOT EXISTS relations (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        type_name TEXT NOT NULL,
+        src_id TEXT NOT NULL,
+        dst_id TEXT NOT NULL,
+        weight REAL NOT NULL DEFAULT 1.0,
+        confidence REAL NOT NULL DEFAULT 0.7,
+        evidence TEXT NOT NULL DEFAULT '',
+        source_chunk_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, id),
+        FOREIGN KEY(kb_id, src_id) REFERENCES entities(kb_id, id) ON DELETE CASCADE,
+        FOREIGN KEY(kb_id, dst_id) REFERENCES entities(kb_id, id) ON DELETE CASCADE
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_rel_kb_src ON relations(kb_id, src_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rel_kb_dst ON relations(kb_id, dst_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rel_kb_type ON relations(kb_id, type_name)",
+    """CREATE TABLE IF NOT EXISTS mentions (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        chunk_id TEXT NOT NULL,
+        surface TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 0.7,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, id),
+        FOREIGN KEY(kb_id, entity_id) REFERENCES entities(kb_id, id) ON DELETE CASCADE,
+        FOREIGN KEY(kb_id, chunk_id) REFERENCES chunks(kb_id, id) ON DELETE CASCADE
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_mentions_kb_chunk ON mentions(kb_id, chunk_id)",
+    "CREATE INDEX IF NOT EXISTS idx_mentions_kb_entity ON mentions(kb_id, entity_id)",
+    """CREATE TABLE IF NOT EXISTS memories (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        subject TEXT NOT NULL DEFAULT '',
+        subject_norm TEXT NOT NULL DEFAULT '',
+        subject_entity_id TEXT,
+        predicate TEXT NOT NULL DEFAULT '',
+        object_text TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL,
+        importance REAL NOT NULL DEFAULT 0.5,
+        confidence REAL NOT NULL DEFAULT 0.7,
+        salience REAL NOT NULL DEFAULT 0.5,
+        hits INTEGER NOT NULL DEFAULT 0,
+        valid_from TEXT NOT NULL,
+        valid_to TEXT,
+        superseded_by TEXT,
+        source_doc_id TEXT,
+        source_chunk_id TEXT,
+        created_at TEXT NOT NULL,
+        last_access_at TEXT,
+        PRIMARY KEY(kb_id, id)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_memories_kb_subject ON memories(kb_id, subject_norm, predicate)",
+    "CREATE INDEX IF NOT EXISTS idx_memories_kb_kind ON memories(kb_id, kind)",
+    """CREATE TABLE IF NOT EXISTS memories_draft (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        slot_key TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT '',
+        keep_id TEXT,
+        drop_ids_json TEXT NOT NULL DEFAULT '[]',
+        content TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL DEFAULT '',
+        similarity REAL NOT NULL DEFAULT 0,
+        reviewed TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        applied_at TEXT,
+        PRIMARY KEY(kb_id, id)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_draft_kb_status ON memories_draft(kb_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_draft_kb_slot ON memories_draft(kb_id, slot_key)",
+    """CREATE TABLE IF NOT EXISTS terms (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        name_norm TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        synonyms_json TEXT NOT NULL DEFAULT '[]',
+        entity_id TEXT,
+        kind TEXT NOT NULL DEFAULT 'concept',
+        certified INTEGER NOT NULL DEFAULT 0,
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, id)
+    )""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_terms_kb_norm ON terms(kb_id, name_norm)",
+    "CREATE INDEX IF NOT EXISTS idx_terms_kb_certified ON terms(kb_id, certified)",
+    """CREATE TABLE IF NOT EXISTS ingest_log (
+        kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
+        id TEXT NOT NULL,
+        doc_id TEXT,
+        status TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        stats_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(kb_id, id)
+    )""",
+]
+
+for _table in (
+    "meta", "documents", "chunks", "chunk_fts", "vectors", "entity_types",
+    "relation_types", "entities", "entity_aliases", "relations", "mentions",
+    "memories", "memories_draft", "terms", "ingest_log",
+):
+    PG_SCHEMA.extend([
+        f"ALTER TABLE {_table} ENABLE ROW LEVEL SECURITY",
+        f"ALTER TABLE {_table} FORCE ROW LEVEL SECURITY",
+        f"DROP POLICY IF EXISTS kb_isolation ON {_table}",
+        f"CREATE POLICY kb_isolation ON {_table} USING "
+        "(kb_id = current_setting('app.kb_id', true)) WITH CHECK "
+        "(kb_id = current_setting('app.kb_id', true))",
+    ])
+
+
 CORE_ENTITY_TYPES: list[tuple[str, str | None, str]] = [
     ("项目", None, "有明确目标与时间跨度的工作集合"),
     ("人物", None, "自然人"),
@@ -217,13 +443,92 @@ CORE_RELATION_TYPES: list[tuple[str, str, str, str, int]] = [
 ]
 
 
-def connect(path: str | Path, *, create: bool = True) -> sqlite3.Connection:
+class _PgCursor:
+    def __init__(self, cursor: Any) -> None:
+        self._cursor = cursor
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+    @property
+    def rowcount(self) -> int:
+        return int(getattr(self._cursor, "rowcount", -1))
+
+
+class PgConnection:
+    """Small DB-API facade so the KB SQL can keep using qmark placeholders."""
+
+    is_postgres = True
+
+    def __init__(self, dsn: str, *, kb_id: str) -> None:
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as exc:  # pragma: no cover - optional infra
+            raise RuntimeError(
+                "知识库使用 PostgreSQL 需要安装 psycopg[binary]"
+            ) from exc
+        self._raw = psycopg.connect(dsn, row_factory=dict_row, autocommit=True)
+        self.kb_id = kb_id or "default"
+        self._raw.execute(
+            "SELECT set_config('app.kb_id', %s, false)", (self.kb_id,)
+        )
+
+    def execute(self, sql: str, params: Any = ()):
+        return _PgCursor(self._raw.execute(sql.replace("?", "%s"), params))
+
+    def executemany(self, sql: str, seq: Any):
+        return _PgCursor(self._raw.executemany(sql.replace("?", "%s"), seq))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is None:
+            self._raw.commit()
+        else:
+            self._raw.rollback()
+        return False
+
+    def close(self) -> None:
+        self._raw.close()
+
+
+def _kb_id_from_path(path: Path) -> str:
+    name = path.name
+    if name.startswith("kb_") and name.endswith(".sqlite3"):
+        return name[3:-8]
+    return "default"
+
+
+def connect(
+    path: str | Path,
+    *,
+    create: bool = True,
+    kb_id: str | None = None,
+    dsn: str | None = None,
+) -> Any:
+    if dsn is None:
+        dsn = (
+            os.getenv("WEBCHAT_KB_DB_URL")
+            or os.getenv("WEBCHAT_DB_URL")
+            or ""
+        ).strip()
+    dsn = (dsn or "").strip()
+    if dsn.startswith(("postgres://", "postgresql://")):
+        return PgConnection(dsn, kb_id=kb_id or os.getenv("WEBCHAT_KB_ID", "") or _kb_id_from_path(Path(path)))
     p = Path(path)
     if create:
         p.parent.mkdir(parents=True, exist_ok=True)
     elif not p.exists():
         raise FileNotFoundError(f"数据库不存在：{p}（先运行 `kb init`）")
-    conn = sqlite3.connect(str(p), isolation_level=None)  # 手动管理事务
+    conn = sqlite3.connect(str(p), isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -241,7 +546,7 @@ def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str
 
 def init_schema(conn: sqlite3.Connection) -> None:
     with conn:  # 单事务建表
-        for stmt in SCHEMA:
+        for stmt in (PG_SCHEMA if getattr(conn, "is_postgres", False) else SCHEMA):
             conn.execute(stmt)
         row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
         if row is None:
@@ -249,17 +554,18 @@ def init_schema(conn: sqlite3.Connection) -> None:
                 "INSERT INTO meta(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
-        _ensure_columns(
-            conn,
-            "memories_draft",
-            {
-                "similarity": "REAL NOT NULL DEFAULT 0",
-                "reviewed": "TEXT NOT NULL DEFAULT ''",
-            },
-        )
+        if not getattr(conn, "is_postgres", False):
+            _ensure_columns(
+                conn,
+                "memories_draft",
+                {
+                    "similarity": "REAL NOT NULL DEFAULT 0",
+                    "reviewed": "TEXT NOT NULL DEFAULT ''",
+                },
+            )
         _seed_core_types(conn)
         conn.execute(
-            "INSERT OR IGNORE INTO meta(key, value) VALUES('created_at', ?)", (iso(),)
+            "INSERT INTO meta(key, value) VALUES('created_at', ?) ON CONFLICT DO NOTHING", (iso(),)
         )
 
 
@@ -267,15 +573,15 @@ def _seed_core_types(conn: sqlite3.Connection) -> None:
     ts = iso()
     for name, parent, desc in CORE_ENTITY_TYPES:
         conn.execute(
-            "INSERT OR IGNORE INTO entity_types(name, parent, description, is_core, created_at)"
-            " VALUES(?,?,?,1,?)",
+            "INSERT INTO entity_types(name, parent, description, is_core, created_at)"
+            " VALUES(?,?,?,1,?) ON CONFLICT DO NOTHING",
             (name, parent, desc, ts),
         )
     for name, domain, rng, desc, sym in CORE_RELATION_TYPES:
         conn.execute(
-            "INSERT OR IGNORE INTO relation_types"
-            "(name, domain, range, description, symmetric, is_core, created_at)"
-            " VALUES(?,?,?,?,?,1,?)",
+            "INSERT INTO relation_types"
+            "(name, domain, range, description, \"symmetric\", is_core, created_at)"
+            " VALUES(?,?,?,?,?,1,?) ON CONFLICT DO NOTHING",
             (name, domain, rng, desc, sym, ts),
         )
 
@@ -289,11 +595,18 @@ def meta_get(conn: sqlite3.Connection, key: str) -> str | None:
 
 
 def meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
-    conn.execute(
-        "INSERT INTO meta(key, value) VALUES(?,?)"
-        " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-        (key, value),
-    )
+    if getattr(conn, "is_postgres", False):
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES(?,?)"
+            " ON CONFLICT(kb_id, key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES(?,?)"
+            " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
 
 
 def table_counts(conn: sqlite3.Connection) -> dict[str, int]:

@@ -66,7 +66,7 @@ class Ontology:
         if row is None:
             self.conn.execute(
                 "INSERT INTO relation_types"
-                "(name, domain, range, description, symmetric, is_core, created_at)"
+                "(name, domain, range, description, \"symmetric\", is_core, created_at)"
                 " VALUES(?,?,?,?,?,?,?)",
                 (name, domain, range_, description, int(symmetric), is_core, iso()),
             )
@@ -95,7 +95,7 @@ class Ontology:
 
     def relation_type_stats(self) -> list[dict[str, Any]]:
         rows = self.conn.execute(
-            """SELECT t.name, t.is_core, t.description, t.symmetric,
+            """SELECT t.name, t.is_core, t.description, t."symmetric",
                       COUNT(r.id) AS edges
                FROM relation_types t LEFT JOIN relations r ON r.type_name = t.name
                GROUP BY t.name ORDER BY edges DESC, t.name"""
@@ -109,7 +109,8 @@ class Ontology:
         if not norm or len(norm) < 1:
             return
         self.conn.execute(
-            "INSERT OR IGNORE INTO entity_aliases(entity_id, alias, alias_norm) VALUES(?,?,?)",
+            "INSERT INTO entity_aliases(entity_id, alias, alias_norm) VALUES(?,?,?)"
+            " ON CONFLICT DO NOTHING",
             (entity_id, alias.strip(), norm),
         )
 
@@ -178,9 +179,10 @@ class Ontology:
         entity_id = make_id("ent", type_name, norm)
         ts = iso()
         self.conn.execute(
-            "INSERT OR IGNORE INTO entities"
+            "INSERT INTO entities"
             "(id, type_name, name, name_norm, description, props_json, confidence,"
-            " mention_count, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            " mention_count, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)"
+            " ON CONFLICT DO NOTHING",
             (entity_id, type_name, name, norm, description, "{}", confidence, 1, ts, ts),
         )
         self.add_alias(entity_id, name)
@@ -333,20 +335,20 @@ class Ontology:
         else:
             # 重复出现的同一关系 = 证据增强（权重递增但有上限）
             self.conn.execute(
-                "UPDATE relations SET weight=MIN(3.0, weight+0.25), updated_at=?,"
+                "UPDATE relations SET weight=CASE WHEN weight + 0.25 > 3.0 THEN 3.0 ELSE weight + 0.25 END, updated_at=?,"
                 " evidence=CASE WHEN length(evidence) < length(?) THEN ? ELSE evidence END"
                 " WHERE id=?",
                 (ts, evidence[:500], evidence[:500], rel_id),
             )
         sym = self.conn.execute(
-            "SELECT symmetric FROM relation_types WHERE name=?", (rel_type,)
+            "SELECT \"symmetric\" FROM relation_types WHERE name=?", (rel_type,)
         ).fetchone()
         if sym and sym["symmetric"]:
             mirror = make_id("rel", rel_type, dst_id, src_id)
             self.conn.execute(
-                "INSERT OR IGNORE INTO relations(id, type_name, src_id, dst_id, weight,"
+                "INSERT INTO relations(id, type_name, src_id, dst_id, weight,"
                 " confidence, evidence, source_chunk_id, created_at, updated_at)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                " VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
                 (mirror, rel_type, dst_id, src_id, weight, confidence,
                  evidence[:500], source_chunk_id, ts, ts),
             )

@@ -115,7 +115,7 @@ class KnowledgeService:
     def _bootstrap(self) -> None:
         with self._lock:
             try:
-                conn = connect(self.kb_path)
+                conn = connect(self.kb_path, kb_id=self.kb_id, dsn=self.settings.kb_db_url)
                 try:
                     init_schema(conn)
                     exists = conn.execute("SELECT COUNT(*) AS c FROM chunks").fetchone()["c"]
@@ -145,7 +145,9 @@ class KnowledgeService:
     def _corpus_counts(conn) -> dict[str, Any]:
         def one(sql: str) -> int:
             row = conn.execute(sql).fetchone()
-            return int(row[0]) if row else 0
+            if row is None:
+                return 0
+            return int(next(iter(row.values()))) if hasattr(row, "values") else int(row[0])
 
         return {
             "documents": one("SELECT COUNT(*) FROM documents"),
@@ -158,7 +160,7 @@ class KnowledgeService:
     # --------------------------------------------------------------- helpers
 
     def _connection(self):
-        return connect(self.kb_path)
+        return connect(self.kb_path, kb_id=self.kb_id, dsn=self.settings.kb_db_url)
 
     def _config_k(self, k: int | None = None) -> int:
         base = int(self.cfg.get("retrieval", {}).get("top_k", 6))

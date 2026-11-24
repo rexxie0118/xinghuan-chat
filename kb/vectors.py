@@ -17,12 +17,16 @@ KIND_MEMORY = "memory"
 KIND_ENTITY = "entity"
 
 
+def _conflict_target(conn) -> str:
+    return "kb_id, owner_kind, owner_id" if getattr(conn, "is_postgres", False) else "owner_kind, owner_id"
+
+
 def put_vector(conn, owner_kind: str, owner_id: str, model: str, vec: np.ndarray) -> None:
     arr = np.asarray(vec, dtype=np.float32).reshape(-1)
     conn.execute(
         "INSERT INTO vectors(owner_kind, owner_id, model, dim, vec, updated_at)"
         " VALUES(?,?,?,?,?,?)"
-        " ON CONFLICT(owner_kind, owner_id) DO UPDATE SET"
+        f" ON CONFLICT({_conflict_target(conn)}) DO UPDATE SET"
         " model=excluded.model, dim=excluded.dim, vec=excluded.vec, updated_at=excluded.updated_at",
         (owner_kind, owner_id, model, int(arr.size), arr.tobytes(), iso()),
     )
@@ -37,7 +41,7 @@ def put_vectors(conn, owner_kind: str, model: str, ids: Sequence[str], matrix: n
     conn.executemany(
         "INSERT INTO vectors(owner_kind, owner_id, model, dim, vec, updated_at)"
         " VALUES(?,?,?,?,?,?)"
-        " ON CONFLICT(owner_kind, owner_id) DO UPDATE SET"
+        f" ON CONFLICT({_conflict_target(conn)}) DO UPDATE SET"
         " model=excluded.model, dim=excluded.dim, vec=excluded.vec, updated_at=excluded.updated_at",
         rows,
     )

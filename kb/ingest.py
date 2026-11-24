@@ -177,10 +177,11 @@ class Ingester:
             self._delete_chunks(doc_id)
 
         ts = iso()
+        conflict = "kb_id, id" if getattr(self.conn, "is_postgres", False) else "id"
         self.conn.execute(
             "INSERT INTO documents(id, source_uri, title, doc_type, content, content_hash,"
             " created_at, updated_at, meta_json) VALUES(?,?,?,?,?,?,?,?,?)"
-            " ON CONFLICT(id) DO UPDATE SET title=excluded.title, doc_type=excluded.doc_type,"
+            f" ON CONFLICT({conflict}) DO UPDATE SET title=excluded.title, doc_type=excluded.doc_type,"
             " content=excluded.content, content_hash=excluded.content_hash,"
             " updated_at=excluded.updated_at",
             (doc_id, source_uri, title, doc_type, text, digest, ts, ts, "{}"),
@@ -322,8 +323,9 @@ class Ingester:
                 for row in chunk_rows:
                     if name and name in row[4]:
                         self.conn.execute(
-                            "INSERT OR IGNORE INTO mentions(id, entity_id, chunk_id, surface,"
-                            " confidence, created_at) VALUES(?,?,?,?,?,?)",
+                            "INSERT INTO mentions(id, entity_id, chunk_id, surface,"
+                            " confidence, created_at) VALUES(?,?,?,?,?,?)"
+                            " ON CONFLICT DO NOTHING",
                             (make_id("men", entity_id, row[0]), entity_id, row[0], name, 0.7, ts),
                         )
 

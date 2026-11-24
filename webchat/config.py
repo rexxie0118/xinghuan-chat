@@ -58,6 +58,7 @@ class Settings:
     secure_cookie: bool
     kb_provider: str | None
     seed_demo_users: bool
+    kb_db_url: str = ""
     allow_script_exec: bool = True
     sandbox: str = "local"
     mcp_config: Path | None = None
@@ -115,6 +116,7 @@ class Settings:
             db_path=Path(os.getenv("WEBCHAT_DB", data_dir / "webchat.sqlite3")).expanduser(),
             kb_path=kb_path,
             kb_config_path=kb_config,
+            kb_db_url=(os.getenv("WEBCHAT_KB_DB_URL") or os.getenv("WEBCHAT_DB_URL") or "").strip(),
             knowledge_dir=Path(
                 os.getenv("WEBCHAT_KNOWLEDGE_DIR", ROOT / "knowledge")
             ).expanduser(),
