@@ -27,6 +27,7 @@ from typing import Any
 
 from ..object_store import build_artifact_store
 from . import RunRequest, RunResult
+from .apple_network import ensure_internal_network, network_policy
 from .local import MAX_OUTPUT_CHARS, _truncate
 
 RUNTIME_COMMANDS = {
@@ -58,7 +59,16 @@ class AppleContainerRunner:
             return str(path) if path.exists() else None
         return shutil.which(self.binary)
 
+    def _network_name(self) -> str | None:
+        name, internal = network_policy(self.network)
+        if internal and name:
+            binary = self._binary()
+            if binary:
+                ensure_internal_network(binary, name=name)
+        return name
+
     def _base_command(self, *, name: str, input_dir: Path, output_dir: Path) -> list[str]:
+        network = self._network_name()
         return [
             self._binary() or self.binary,
             "run",
@@ -69,7 +79,7 @@ class AppleContainerRunner:
             "--read-only",
             "--cap-drop",
             "ALL",
-            *(["--network", self.network] if self.network.lower() != "default" else []),
+            *(["--network", network] if network else []),
             "--cpus",
             self.cpus,
             "--memory",
@@ -139,16 +149,6 @@ class AppleContainerRunner:
             return RunResult(
                 ran=False,
                 reason=f"不支持的 runtime：{request.runtime}",
-                runner=self.name,
-                run_id=request.run_id,
-            )
-        if self.network.lower() == "none":
-            return RunResult(
-                ran=False,
-                reason=(
-                    "Apple Container 目前没有 --network none；"
-                    "请使用 APPLE_CONTAINER_NETWORK=default 并在宿主机配置出站防火墙"
-                ),
                 runner=self.name,
                 run_id=request.run_id,
             )

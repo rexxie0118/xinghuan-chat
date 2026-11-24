@@ -44,6 +44,7 @@ from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
 from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
 from .sandbox.apple_pool import AppleContainerPool
+from .sandbox.apple_network import network_policy
 from .container_workspaces import ContainerWorkspaceService, RuntimeReaper
 from .tools import ToolError, build_tool_registry
 from .websearch import register_web_tools
@@ -430,6 +431,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "agent_enabled": settings.agent_enabled,
             "agent_engine": "external" if settings.agent_enabled else "local",
             "sandbox": settings.sandbox,
+            "apple_network": {
+                "configured": settings.apple_container_network,
+                "effective": network_policy(settings.apple_container_network)[0] or "default",
+                "isolated": network_policy(settings.apple_container_network)[1],
+            },
             "departments": registry.departments,
             "default_department": registry.default_department,
             "knowledge_bases": registry.catalog_public(),
@@ -460,6 +466,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
             "agent": "external" if settings.agent_enabled else "local",
             "sandbox": settings.sandbox,
+            "apple_network": {
+                "configured": settings.apple_container_network,
+                "effective": network_policy(settings.apple_container_network)[0] or "default",
+                "isolated": network_policy(settings.apple_container_network)[1],
+            },
         }
 
     # ---------------------------------------------------------------- auth

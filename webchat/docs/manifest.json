@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-13",
+      "title": "Apple Container 网络与安全策略",
+      "date": "2026-11-24",
+      "summary": "isolated/none 映射到 host-only xh-isolated 网络，阻止容器公网访问；default 才允许外网。",
+      "record": "iterations/2026-11-24-13.html",
+      "diagrams": [
+        "architecture/2026-11-24-apple-network.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-12",
       "title": "MCP 权限与安全",
       "date": "2026-11-24",
@@ -421,6 +431,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-mcp-security.svg",
       "note": "MCP 配置边界已落地；无交互式审批队列。"
+    },
+    {
+      "id": "2026-11-24-v24",
+      "label": "v24 · Apple Network",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-apple-network.svg",
+      "note": "host-only 网络隔离已落地；需要联网需显式 default。"
     }
   ]
 }

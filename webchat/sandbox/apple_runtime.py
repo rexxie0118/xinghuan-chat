@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .apple_network import ensure_internal_network, network_policy
+
 
 class ContainerRuntimeError(RuntimeError):
     pass
@@ -205,12 +207,11 @@ class AppleContainerRuntime:
             ]
             if create_args:
                 args += [str(item) for item in create_args]
-            if self.network and self.network.lower() != "default":
-                args += ["--network", self.network]
-            if self.network.lower() == "none":
-                raise ContainerRuntimeError(
-                    "Apple Container 目前没有 --network none；请用 default + 宿主防火墙"
-                )
+            network_name, internal = network_policy(self.network)
+            if internal and network_name:
+                ensure_internal_network(self.binary, name=network_name)
+            if network_name:
+                args += ["--network", network_name]
             args.append(image)
             args += command
             self._run(args, timeout=90)

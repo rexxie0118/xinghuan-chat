@@ -1235,7 +1235,7 @@ class MyPlugin:
 | `APPLE_CONTAINER_IMAGE` | `python:3.12-slim` | Agent runtime 镜像，需包含对应 runtime |
 | `APPLE_CONTAINER_CPUS` | `2` | 每个执行容器的 CPU 配额 |
 | `APPLE_CONTAINER_MEMORY` | `2G` | 每个执行容器的内存配额 |
-| `APPLE_CONTAINER_NETWORK` | `default` | Apple Container 网络；不支持 `none`，需要无网时用宿主防火墙 |
+| `APPLE_CONTAINER_NETWORK` | `default` | `default` 允许外网；`isolated` / `none` 映射到 host-only 内部网络 |
 | `GITHUB_TOKEN` | 空 | 导入私有 GitHub 仓库 / 提高 API 速率限制 |
 | `WEBCHAT_MCP_CONFIG` | `webchat/mcp.json` | MCP server 配置；文件不存在则工具为空 |
 | `WEBCHAT_TOOLS_ENABLED` | `true` | 是否启用 MCP 工具注册表 |
@@ -1262,7 +1262,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 75 项测试，全部通过。
+> 当前共 77 项测试，全部通过。
 
 ---
 
