@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-33",
+      "title": "入口收进账号菜单",
+      "date": "2026-11-24",
+      "summary": "知识库文档/用户权限/连接器/团队记忆/记忆/Docs 迁入左下角账号菜单。",
+      "record": "iterations/2026-11-24-33.html",
+      "diagrams": [
+        "architecture/2026-11-24-user-menu.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-32",
       "title": "时间线记忆图谱 / 多模态附件",
       "date": "2026-11-24",
@@ -761,6 +771,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-temporal-memory.svg",
       "note": "时间线事实和附件归档已落地；跨模态 embedding 未做。"
+    },
+    {
+      "id": "2026-11-24-v44",
+      "label": "v44 · User Menu",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-user-menu.svg",
+      "note": "入口折叠到账号菜单；顶栏只保留模式、引擎和知识面板。"
     }
   ]
 }

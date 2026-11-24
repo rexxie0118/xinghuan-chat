@@ -7,7 +7,7 @@
   <meta name="description" content="星环 Chat — 带 RAG、本体图谱与多用户会话的 AI 工作台演示。">
   <title>星环 Chat · Ontology-aware AI Workspace</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20261124-memorytimeline">
+  <link rel="stylesheet" href="/static/styles.css?v=20261124-usermenu">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -234,6 +234,31 @@
             <svg class="icon"><use href="#i-more"/></svg>
           </button>
           <div id="user-menu" class="popover" hidden>
+            <button id="kb-docs-btn" class="popover-item" type="button" title="查看和管理知识库文档">
+              <svg class="icon"><use href="#i-book"/></svg>
+              <span>知识库文档</span>
+            </button>
+            <button id="admin-btn" class="popover-item" type="button" title="管理用户部门与角色" hidden>
+              <svg class="icon"><use href="#i-user"/></svg>
+              <span>用户权限</span>
+            </button>
+            <button id="connector-btn" class="popover-item" type="button" title="管理联网连接器">
+              <svg class="icon"><use href="#i-orbit"/></svg>
+              <span>连接器</span>
+            </button>
+            <button id="team-memory-btn" class="popover-item" type="button" title="管理部门与全公司共享记忆" hidden>
+              <svg class="icon"><use href="#i-graph"/></svg>
+              <span>团队记忆</span>
+            </button>
+            <button id="memory-btn" class="popover-item" type="button" title="查看和管理你的长期记忆">
+              <svg class="icon"><use href="#i-sparkle"/></svg>
+              <span>记忆</span>
+            </button>
+            <a class="popover-item" href="/docs/" target="_blank" rel="noopener" title="迭代记录、Todo 与架构历史">
+              <svg class="icon"><use href="#i-book"/></svg>
+              <span>Docs</span>
+            </a>
+            <div class="popover-sep"></div>
             <button id="theme-toggle" class="popover-item">
               <svg class="icon theme-icon-moon"><use href="#i-moon"/></svg>
               <svg class="icon theme-icon-sun"><use href="#i-sun"/></svg>
@@ -275,30 +300,6 @@
               <span>Agent</span>
             </button>
           </div>
-          <button id="kb-docs-btn" class="docs-btn kb-docs-btn" type="button" title="查看和管理知识库文档">
-            <svg class="icon"><use href="#i-book"/></svg>
-            <span>知识库文档</span>
-          </button>
-          <button id="admin-btn" class="docs-btn admin-btn" type="button" title="管理用户部门与角色" hidden>
-            <svg class="icon"><use href="#i-user"/></svg>
-            <span>用户权限</span>
-          </button>
-          <button id="connector-btn" class="docs-btn connector-btn" type="button" title="管理联网连接器">
-            <svg class="icon"><use href="#i-orbit"/></svg>
-            <span>连接器</span>
-          </button>
-          <button id="team-memory-btn" class="docs-btn team-memory-btn" type="button" title="管理部门与全公司共享记忆" hidden>
-            <svg class="icon"><use href="#i-graph"/></svg>
-            <span>团队记忆</span>
-          </button>
-          <button id="memory-btn" class="docs-btn memory-btn" type="button" title="查看和管理你的长期记忆">
-            <svg class="icon"><use href="#i-sparkle"/></svg>
-            <span>记忆</span>
-          </button>
-          <a class="docs-btn" href="/docs/" target="_blank" rel="noopener" title="迭代记录、Todo 与架构历史">
-            <svg class="icon"><use href="#i-book"/></svg>
-            <span>Docs</span>
-          </a>
           <span id="engine-badge" class="engine-badge" title="当前 Agent 引擎">
             <span class="status-dot"></span>
             <span>本地 Agent</span>
@@ -482,6 +483,6 @@
   <div id="modal-root" class="modal-root" hidden></div>
   <div id="entity-sheet" class="entity-sheet" hidden></div>
 
-  <script src="/static/app.js?v=20261124-memorytimeline" defer></script>
+  <script src="/static/app.js?v=20261124-usermenu" defer></script>
 </body>
 </html>

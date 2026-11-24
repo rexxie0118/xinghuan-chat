@@ -3931,12 +3931,19 @@
       state.search = event.target.value;
       renderConversations();
     });
+    const closeUserMenu = () => {
+      $("#user-menu").hidden = true;
+      $("#user-menu-btn").setAttribute("aria-expanded", "false");
+    };
     $("#user-menu-btn").addEventListener("click", (event) => {
       event.stopPropagation();
       const menu = $("#user-menu");
       const open = menu.hidden;
       menu.hidden = !open;
       $("#user-menu-btn").setAttribute("aria-expanded", String(open));
+    });
+    $("#user-menu").addEventListener("click", (event) => {
+      if (event.target.closest("button, a")) closeUserMenu();
     });
     document.addEventListener("click", (event) => {
       if (!event.target.closest(".user-card")) {

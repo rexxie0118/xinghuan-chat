@@ -2039,3 +2039,21 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
 .timeline-status.historical { color: #f4c47a; }
 .timeline-status.pending { color: var(--accent); }
 .timeline-status.rejected { color: #f4a3a3; }
+
+/* ------------------------------------------------------- user menu items */
+.popover {
+  width: 214px;
+  max-height: min(440px, 72vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.popover-item {
+  text-decoration: none;
+  height: 34px;
+}
+.popover-item .icon { flex: none; }
+.popover-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
