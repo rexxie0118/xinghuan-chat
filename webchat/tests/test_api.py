@@ -257,6 +257,7 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(page.status_code, 200)
             self.assertIn("星环 Chat", page.text)
             self.assertIn("research-link", page.text)
+            self.assertIn("current-arch-link", page.text)
             manifest = client.get("/docs/manifest.json")
             self.assertEqual(manifest.status_code, 200)
             data = manifest.json()
@@ -267,7 +268,12 @@ class ApiTest(unittest.TestCase):
             research = client.get("/docs/memory-trends.html")
             self.assertEqual(research.status_code, 200)
             self.assertIn("Backlog", research.text)
-            self.assertIn("memory-trends", client.get("/docs/docs.js").text)
+            docs_js = client.get("/docs/docs.js").text
+            self.assertIn("memory-trends", docs_js)
+            self.assertIn("current-architecture", docs_js)
+            current = client.get("/docs/current-architecture.html")
+            self.assertEqual(current.status_code, 200)
+            self.assertIn("当前主架构与运行栈", current.text)
 
     def test_health_and_meta(self):
         with TestClient(self.app) as client:

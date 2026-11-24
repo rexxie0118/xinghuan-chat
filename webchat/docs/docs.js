@@ -66,6 +66,20 @@
     }
   }
 
+  const currentArchLink = document.querySelector("#current-arch-link");
+  currentArchLink?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/docs/current-architecture.html", { cache: "no-store" });
+      if (!res.ok) throw new Error(`architecture HTTP ${res.status}`);
+      content.innerHTML = await res.text();
+      setActive(currentArchLink);
+      latestRecord = null;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      content.innerHTML = `<div class="error">当前架构加载失败：${escapeHtml(err.message)}</div>`;
+    }
+  });
+
   const researchLink = document.querySelector("#research-link");
   researchLink?.addEventListener("click", async () => {
     try {

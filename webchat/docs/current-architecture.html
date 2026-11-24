@@ -1,0 +1,119 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">LIVE ARCHITECTURE · 2026-11-24</div>
+    <h1>当前主架构与运行栈</h1>
+    <p class="lede">
+      这张图描述现在实际运行的星环 Chat：Web + PostgreSQL + Redis Worker + Apple Container。
+      历史架构图只追加、不覆盖；这里是最新的一张“当前视图”。
+    </p>
+    <div class="meta-row">
+      <span>运行栈：PG 16 + Redis 8 + Worker</span>
+      <span>KB：共享 PostgreSQL 表</span>
+      <span>测试：123 项通过</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>主架构图</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-current-architecture.svg" alt="星环 Chat 当前主架构" />
+      <figcaption>Browser → FastAPI → AgentKernel → Tool/Container → PostgreSQL / Redis / Object Store</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>运行栈</h2>
+    <table class="todo-table">
+      <thead><tr><th>组件</th><th>地址 / 形态</th><th>职责</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>Web</td><td><code>127.0.0.1:8787</code></td><td>SPA、SSE、REST API、鉴权、审计</td><td><span class="status done">运行中</span></td></tr>
+        <tr><td>PostgreSQL 16</td><td><code>127.0.0.1:5432</code></td><td>控制面 + 共享 KB 表 + RLS</td><td><span class="status done">运行中</span></td></tr>
+        <tr><td>Redis 8</td><td><code>127.0.0.1:6379</code></td><td>任务队列 ready / processing / dead</td><td><span class="status done">运行中</span></td></tr>
+        <tr><td>Worker</td><td>独立 Python 进程</td><td>消费队列，执行 AgentRunner</td><td><span class="status done">运行中</span></td></tr>
+        <tr><td>Apple Container</td><td><code>xh-isolated</code></td><td>导入 Agent / Skill 执行</td><td><span class="status done">运行中</span></td></tr>
+        <tr><td>对象存储 / 文件</td><td><code>webchat/data</code></td><td>artifacts、memory_media、SQLite 备份</td><td><span class="status done">本地</span></td></tr>
+        <tr><td>DeepSeek API</td><td>外部 HTTPS</td><td>回答模型；本地 hash embedding</td><td><span class="status done">已配置</span></td></tr>
+        <tr><td>Tavily / Web</td><td>外部 HTTPS</td><td>web_search / web_fetch</td><td><span class="status done">已配置</span></td></tr>
+        <tr><td>Corporate SSO</td><td>OIDC / SAML</td><td>企业身份源</td><td><span class="status pending">未接入</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>数据流</h2>
+    <pre class="record-pre">Chat
+  Browser → FastAPI → ConcurrencyGate
+  → AgentRunner → KB retrieval (PostgreSQL)
+  → Memory recall → Tool Loop / MCP / Web
+  → Answer + citations → audit_events
+
+Async Agent
+  Web → Redis ready
+  → Worker BLMOVE processing
+  → AgentRunner → Postgres message/result
+  → complete / retry / dead
+
+Knowledge
+  upload → parser → chunks
+  → kb_* PostgreSQL tables (kb_id + RLS)
+  → vectors / entities / relations
+
+Memory
+  write → quality gate → dedupe / semantic merge
+  → personal active / shared pending
+  → approve / reject / audit rollback
+  → recall + temporal graph</pre>
+  </section>
+
+  <section>
+    <h2>存储分工</h2>
+    <table class="todo-table">
+      <thead><tr><th>存储</th><th>内容</th><th>是否主路径</th></tr></thead>
+      <tbody>
+        <tr><td>PostgreSQL</td><td>用户、会话、消息、Agent、KB 表、记忆、审计、队列元数据</td><td>是</td></tr>
+        <tr><td>Redis</td><td>任务协调、lease、死信</td><td>是</td></tr>
+        <tr><td>Object Store / 文件</td><td>artifacts、memory_media</td><td>是</td></tr>
+        <tr><td>SQLite <code>kb_*.sqlite3</code></td><td>迁移前 KB 备份</td><td>否（回滚）</td></tr>
+        <tr><td>pgvector</td><td>已启用扩展；HNSW 尚未接</td><td>下一步</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>启动与检查</h2>
+    <pre class="record-pre"># 服务
+brew services start postgresql@16
+brew services start redis
+
+# Web
+python -m webchat --host 127.0.0.1 --port 8787
+
+# Worker
+WEBCHAT_QUEUE_URL=redis://127.0.0.1:6379/0 \
+python -m webchat.worker
+
+# 健康
+curl http://127.0.0.1:8787/api/health
+redis-cli ping
+pg_isready -h 127.0.0.1 -p 5432</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>PostgreSQL 是本机 Homebrew 单实例，不是高可用集群；</li>
+      <li>知识库向量仍以 BYTEA + Python 余弦运行，pgvector HNSW 未接；</li>
+      <li>中文 FTS 使用 ILIKE / pg_trgm 回退，不等价 SQLite FTS5 BM25；</li>
+      <li>Redis 是单实例，未配置密码/TLS；</li>
+      <li>企业 SSO 尚未接入；</li>
+      <li>多 Worker 尚未压测，任务不是 exactly-once。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>历史入口</h2>
+    <p class="muted">
+      侧栏「架构历史」保留所有版本；当前主图对应 v46。旧图不会被覆盖。
+    </p>
+  </section>
+</article>

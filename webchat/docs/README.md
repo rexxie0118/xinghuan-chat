@@ -21,3 +21,7 @@
 研究笔记：
 
 - `memory-trends.html`：Agent 记忆趋势、证据、噪音与 backlog，Docs 侧栏「Agent 记忆趋势」进入。
+
+当前视图：
+
+- `current-architecture.html`：当前主架构与运行栈，Docs 侧栏「当前架构 / 运行栈」进入。

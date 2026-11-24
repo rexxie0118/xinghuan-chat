@@ -795,6 +795,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-kb-postgres.svg",
       "note": "KB 已迁 PG；向量仍 BYTEA/暴力余弦，pgvector HNSW 待接。"
+    },
+    {
+      "id": "2026-11-24-v46",
+      "label": "v46 · Current Architecture",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-current-architecture.svg",
+      "note": "当前主架构：Web + PostgreSQL + Redis Worker + Apple Container；运行栈见 current-architecture.html。"
     }
   ]
 }
