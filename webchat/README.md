@@ -508,6 +508,42 @@ GET /api/containers/pool
 
 ---
 
+## 4.4 评测集与失败注入
+
+运行确定性评测：
+
+```bash
+python -m webchat.evals
+python -m webchat.evals --json
+```
+
+覆盖：
+
+```text
+rag_citations        引用编号越界
+tool_loop            tool_calls → ToolRegistry → answer
+web_rank_conflict    官方来源优先 + 数字冲突
+external_react       外部 Agent 工具循环
+failure_injection    注入一次工具失败
+permission_gate      HTTP connector 拒绝
+```
+
+失败注入：
+
+```dotenv
+WEBCHAT_FAILURE_INJECT='[{"component":"tool","target":"web.search","times":1}]'
+```
+
+支持：
+
+```text
+component: tool / external
+target:    * 或工具名
+times:     注入次数
+```
+
+第一次匹配调用抛 `InjectedFailure`，之后恢复正常。
+
 ## 4.5 声明式联网连接器
 
 联网不走「模型临时生成 Python」这条路，而是：
@@ -1310,7 +1346,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 79 项测试，全部通过。
+> 当前共 80 项测试，全部通过。
 
 ---
 

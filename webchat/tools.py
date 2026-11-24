@@ -552,8 +552,9 @@ class MCPClientPool:
 class ToolRegistry:
     """Discovers MCP tools and enforces the configured allowlist."""
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None, *, injector: Any = None) -> None:
         self.config = config or {}
+        self.injector = injector
         self.servers = self.config.get("servers") or {}
         self._clients: dict[str, MCPClientPool] = {}
         self._specs: dict[str, ToolSpec] = {}
@@ -694,6 +695,8 @@ class ToolRegistry:
         spec = self._specs.get(name)
         if spec is None:
             raise ToolError(f"工具不存在或未授权：{name}")
+        if self.injector is not None:
+            self.injector.maybe("tool", name)
         server_config = self.servers.get(spec.server) or {}
         if (
             spec.server != "plugin"
@@ -812,7 +815,9 @@ def build_tool_registry(settings: Any) -> ToolRegistry:
         return ToolRegistry({})
     path = getattr(settings, "mcp_config", None) or (Path(settings.root) / "mcp.json")
     config = load_mcp_config(path)
-    registry = ToolRegistry(config)
+    from .runtime.injection import FailureInjector
+
+    registry = ToolRegistry(config, injector=FailureInjector.from_env())
     if config:
         registry.discover()
     return registry

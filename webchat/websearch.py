@@ -7,6 +7,7 @@ SSRF-guarded; results carry source, timestamp and trust metadata.
 
 from __future__ import annotations
 
+import difflib
 import html
 import ipaddress
 import json
@@ -378,7 +379,10 @@ def conflict_detect(sources: list[dict[str, Any]]) -> dict[str, Any]:
             if not left_words or not right_words:
                 continue
             overlap = len(left_words & right_words) / len(left_words | right_words)
-            if overlap >= 0.45 and left["numbers"] != right["numbers"]:
+            left_norm = re.sub(r"\d+(?:[.,]\d+)?", "#", left["text"])
+            right_norm = re.sub(r"\d+(?:[.,]\d+)?", "#", right["text"])
+            similarity = difflib.SequenceMatcher(None, left_norm, right_norm).ratio()
+            if (overlap >= 0.45 or similarity >= 0.55) and left["numbers"] != right["numbers"]:
                 details.append(
                     {
                         "left": left,

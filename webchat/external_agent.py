@@ -16,6 +16,7 @@ import httpx
 
 from .runtime.cancel import CancellationToken
 from .runtime.failures import CircuitBreaker, RetryPolicy
+from .runtime.injection import FailureInjector
 from .tools import ToolError, ToolRegistry, ToolSpec
 
 
@@ -28,8 +29,10 @@ class ExternalAgentClient:
         breaker: CircuitBreaker | None = None,
         poster=None,
         max_steps: int = 4,
+        injector=None,
     ) -> None:
         self.settings = settings
+        self.injector = injector or FailureInjector.from_env()
         self.tools = tools
         self.breaker = breaker or CircuitBreaker("external-agent")
         self.poster = poster or httpx.post
@@ -53,6 +56,8 @@ class ExternalAgentClient:
         return out
 
     def _post(self, body: dict[str, Any]) -> dict[str, Any]:
+        if self.injector is not None:
+            self.injector.maybe("external", "chat")
         headers = {"Content-Type": "application/json"}
         if getattr(self.settings, "agent_token", None):
             headers["Authorization"] = f"Bearer {self.settings.agent_token}"

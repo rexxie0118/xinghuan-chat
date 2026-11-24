@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-15",
+      "title": "评测集与失败注入",
+      "date": "2026-11-24",
+      "summary": "6 个确定性 eval + FailureInjector；支持 tool/external 按 target/times 注入。",
+      "record": "iterations/2026-11-24-15.html",
+      "diagrams": [
+        "architecture/2026-11-24-evals.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-14",
       "title": "外部 Agent 接 MCP/ReAct",
       "date": "2026-11-24",
@@ -455,6 +465,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-external-react.svg",
       "note": "外部 Agent 可请求本地 allowlisted 工具；旧 answer 契约兼容。"
+    },
+    {
+      "id": "2026-11-24-v26",
+      "label": "v26 · Evals & Injection",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-evals.svg",
+      "note": "确定性评测和失败注入已落地；暂无真实 LLM/人工质量评测。"
     }
   ]
 }
