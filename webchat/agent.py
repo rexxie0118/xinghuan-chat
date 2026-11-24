@@ -25,6 +25,7 @@ import httpx
 from .agent_defs import ImportedAgent, cited_indices
 from .config import Settings
 from kb.context_budget import ContextBudget, Section
+from .external_agent import ExternalAgentClient
 from .knowledge import KnowledgeService
 from .runtime.cancel import CancellationToken
 from .runtime.failures import (
@@ -324,6 +325,7 @@ class AgentRunner:
                 retrieval=result,
                 base_trace=base_trace,
                 kb=kb,
+                cancel_token=cancel_token,
             )
             if external is not None:
                 return external
@@ -1418,6 +1420,7 @@ class AgentRunner:
         retrieval: dict[str, Any],
         base_trace: list[dict[str, Any]],
         kb: KnowledgeService,
+        cancel_token: CancellationToken | None = None,
     ) -> AgentResult | None:
         hits = []
         for i, hit in enumerate(retrieval.get("hits", [])[:6], 1):
@@ -1431,44 +1434,22 @@ class AgentRunner:
                     "score": hit.get("score", 0),
                 }
             )
-        body = {
-            "user": {"id": user["id"], "name": user["display_name"]},
-            "conversation_id": conversation["id"],
-            "knowledge_base": {
-                "id": kb.info.id,
-                "name": kb.info.name,
-                "department": kb.info.department,
-            },
-            "mode": mode,
-            "messages": history[-8:] + [{"role": "user", "content": question}],
-            "context": {
-                "question": question,
-                "hits": hits,
-                "graph": retrieval.get("graph", {}),
-                "memories": retrieval.get("memories", [])[:4],
-            },
-        }
-        headers = {"Content-Type": "application/json"}
-        if self.settings.agent_token:
-            headers["Authorization"] = f"Bearer {self.settings.agent_token}"
         started = time.perf_counter()
-
-        def request() -> dict[str, Any]:
-            resp = httpx.post(
-                self.settings.agent_url.rstrip("/") + "/chat",
-                json=body,
-                headers=headers,
-                timeout=self.settings.agent_timeout,
-            )
-            resp.raise_for_status()
-            payload = resp.json()
-            if not str(payload.get("answer") or "").strip():
-                raise ValueError("Agent 返回了空 answer")
-            return payload
-
         try:
-            data = RetryPolicy(attempts=2, base_delay=0.3, max_delay=2).run(
-                request, breaker=self.external_breaker
+            client = ExternalAgentClient(
+                self.settings,
+                self.tool_registry,
+                breaker=self.external_breaker,
+            )
+            data = client.run(
+                question=question,
+                mode=mode,
+                user=user,
+                conversation=conversation,
+                history=history,
+                retrieval=retrieval,
+                kb=kb,
+                cancel_token=cancel_token,
             )
         except Exception as exc:  # noqa: BLE001 - fall back, never break chat
             failure = classify_exception(exc)
@@ -1478,8 +1459,12 @@ class AgentRunner:
             )
             base_trace.append(local)
             return None
+        if data is None:
+            base_trace.append(self._trace_warning("外部 Agent 没有返回答案，已回退到本地 RAG"))
+            return None
 
         elapsed = int((time.perf_counter() - started) * 1000)
+        answer = str(data.get("answer") or "").strip()
         citations = self._normalize_citations(data.get("citations"), hits)
         trace = list(base_trace)
         for raw in data.get("trace") or []:
@@ -1493,6 +1478,7 @@ class AgentRunner:
                         kind=str(raw.get("kind") or "tool"),
                         status=str(raw.get("status") or "done"),
                         duration_ms=int(raw.get("duration_ms") or 0),
+                        data=raw.get("data") if isinstance(raw.get("data"), dict) else {},
                     )
                 )
         trace.append(
@@ -1504,6 +1490,7 @@ class AgentRunner:
             )
         )
         suggestions = [str(s) for s in (data.get("suggestions") or []) if s][:3]
+        used = list(data.get("tools_used") or [])
         return AgentResult(
             answer=answer,
             citations=citations,
@@ -1514,9 +1501,11 @@ class AgentRunner:
             graph=retrieval.get("graph", {}),
             warnings=[],
             meta={
-                "answer_mode": "agent",
+                "answer_mode": "external_react" if used else "agent",
                 "confidence": data.get("confidence", 0),
                 "agent_service": self.settings.agent_url,
+                "tools_used": used,
+                "external_steps": data.get("steps", 0),
                 "timings": retrieval.get("stats", {}).get("timings", {}),
                 "kb_id": kb.info.id,
                 "kb_name": kb.info.name,

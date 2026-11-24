@@ -696,6 +696,19 @@ Content-Type: application/json
   "knowledge_base": {"id": "product", "name": "产品知识库", "department": "产品部"},
   "mode": "agent",
   "messages": [{"role": "user", "content": "北极星项目的负责人是谁？"}],
+  "react": true,
+  "step": 0,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "web.search",
+        "description": "搜索公开网页",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
+      }
+    }
+  ],
+  "observations": [],
   "context": {
     "question": "北极星项目的负责人是谁？",
     "hits": [
@@ -729,6 +742,41 @@ Content-Type: application/json
 ```
 
 - `citations` 可以是编号数组（映射到请求里的 `hits`），也可以是完整引用对象。
+- 如果外部 Agent 返回 `tool_calls`，Web 会通过本地 `ToolRegistry` 执行 MCP/plugin/connector 工具，把 `observations` 回传，最多循环 4 步。
+- 外部 Agent 不能直接执行本地代码；只能请求 allowlisted 工具。
+
+ReAct 响应示例：
+
+```json
+{
+  "tool_calls": [
+    {
+      "id": "call_1",
+      "function": {
+        "name": "web.search",
+        "arguments": "{\"query\": \"北京天气\"}"
+      }
+    }
+  ]
+}
+```
+
+工具结果会作为：
+
+```json
+{
+  "observations": [
+    {
+      "tool": "web.search",
+      "ok": true,
+      "content": "...",
+      "sources": [...]
+    }
+  ]
+}
+```
+
+再回传给外部 Agent，直到它返回 `answer`。
 - 外部 Agent 超时、非 200 或 JSON 非法时，服务端记录错误并**自动回退到本地 RAG**，用户消息和会话不受影响。
 - 可运行的参考实现：[`examples/external_agent_server.py`](examples/external_agent_server.py)。把它复制到 Agent repo，替换 `answer()` 里的策略即可。
 
@@ -1262,7 +1310,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 77 项测试，全部通过。
+> 当前共 79 项测试，全部通过。
 
 ---
 

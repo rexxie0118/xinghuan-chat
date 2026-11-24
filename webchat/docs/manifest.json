@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-14",
+      "title": "外部 Agent 接 MCP/ReAct",
+      "date": "2026-11-24",
+      "summary": "外部 /chat 支持 tool_calls + observations；Web 执行本地 MCP/plugin/connector 工具，最多 4 步。",
+      "record": "iterations/2026-11-24-14.html",
+      "diagrams": [
+        "architecture/2026-11-24-external-react.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-13",
       "title": "Apple Container 网络与安全策略",
       "date": "2026-11-24",
@@ -438,6 +448,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-apple-network.svg",
       "note": "host-only 网络隔离已落地；需要联网需显式 default。"
+    },
+    {
+      "id": "2026-11-24-v25",
+      "label": "v25 · External Agent ReAct",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-external-react.svg",
+      "note": "外部 Agent 可请求本地 allowlisted 工具；旧 answer 契约兼容。"
     }
   ]
 }
