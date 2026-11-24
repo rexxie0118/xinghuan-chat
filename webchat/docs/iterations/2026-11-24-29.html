@@ -8,7 +8,7 @@
     </p>
     <div class="meta-row">
       <span>状态：已完成</span>
-      <span>测试：114 项通过</span>
+      <span>测试：115 项通过</span>
       <span>架构：v40</span>
     </div>
   </header>
@@ -68,7 +68,7 @@ upsert/skip SQL 生成
   <section>
     <h2>边界</h2>
     <ul>
-      <li>没有本地真实 PostgreSQL 实例，未做 live migration；</li>
+      <li>已完成本机 PostgreSQL 16 live migration；</li>
       <li>知识库 kb_*.sqlite3 的 FTS/向量不迁移；</li>
       <li>迁移期间应停写，避免 SQLite 增量丢失；</li>
       <li>没有自动回滚/双写；</li>

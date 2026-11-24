@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from webchat import repository as repo
-from webchat.db import init_db
+from webchat.db import PgConnection, init_db
 from webchat.pg_migrate import TABLES, _insert_sql, _source_plan, migrate
 
 
@@ -37,6 +37,37 @@ class PgMigrateTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_pg_context_commits_without_closing(self):
+        class Raw:
+            def __init__(self):
+                self.commits = 0
+                self.closes = 0
+                self.rollbacks = 0
+
+            def commit(self):
+                self.commits += 1
+
+            def rollback(self):
+                self.rollbacks += 1
+
+            def close(self):
+                self.closes += 1
+
+        raw = Raw()
+        conn = object.__new__(PgConnection)
+        conn._raw = raw
+        with conn:
+            pass
+        self.assertEqual(raw.commits, 1)
+        self.assertEqual(raw.closes, 0)
+        try:
+            with conn:
+                raise RuntimeError("rollback")
+        except RuntimeError:
+            pass
+        self.assertEqual(raw.rollbacks, 1)
+        self.assertEqual(raw.closes, 0)
 
     def test_dry_run_plan_covers_all_tables(self):
         report = migrate(self.db, "", dry_run=True)

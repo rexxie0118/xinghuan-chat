@@ -41,7 +41,7 @@ from .jobs import RedisJobQueue, new_job
 from .concurrency import ConcurrencyGate, QueueFullError, QueueTimeoutError
 from .connectors import ConnectorError, ConnectorService, known_for, parse_spec, propose_with_llm
 from .config import Settings
-from .db import connect, init_db, is_integrity_error
+from .db import connect, database_url, init_db, is_integrity_error
 from .memory_semantic import LLMSemanticJudge
 from .observability import AuditLog, new_request_id, request_id_var, user_id_var
 from .knowledge import KnowledgeRegistry, KnowledgeService
@@ -521,6 +521,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "agent_enabled": settings.agent_enabled,
             "agent_engine": "external" if settings.agent_enabled else "local",
             "sandbox": settings.sandbox,
+            "database": "postgresql" if database_url().startswith(("postgres://", "postgresql://")) else "sqlite",
             "apple_network": {
                 "configured": settings.apple_container_network,
                 "effective": network_policy(settings.apple_container_network)[0] or "default",
@@ -556,6 +557,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
             "agent": "external" if settings.agent_enabled else "local",
             "sandbox": settings.sandbox,
+            "database": "postgresql" if database_url().startswith(("postgres://", "postgresql://")) else "sqlite",
             "apple_network": {
                 "configured": settings.apple_container_network,
                 "effective": network_policy(settings.apple_container_network)[0] or "default",

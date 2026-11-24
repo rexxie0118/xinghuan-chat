@@ -1116,6 +1116,36 @@ WEBCHAT_OBJECT_STORE=s3      # S3 / MinIO / R2 兼容
 
 知识库检索库仍是 SQLite 文件；Postgres 当前用于 WebChat 控制面。完整容器化示例见 `docker-compose.yml`。
 
+### 本地 PostgreSQL 实例
+
+Homebrew 安装并启动：
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+/opt/homebrew/opt/postgresql@16/bin/pg_isready -h 127.0.0.1 -p 5432
+```
+
+创建应用角色和数据库：
+
+```bash
+psql -d postgres
+CREATE ROLE xinghuan LOGIN PASSWORD 'change-me';
+CREATE DATABASE xinghuan OWNER xinghuan;
+```
+
+当前 `.env` 已指向：
+
+```dotenv
+WEBCHAT_DB_URL=postgresql://xinghuan:<password>@127.0.0.1:5432/xinghuan
+```
+
+`/api/health` 会返回：
+
+```json
+{"database": "postgresql"}
+```
+
 ### SQLite → PostgreSQL 全量迁移
 
 迁移脚本覆盖控制面全部表：
@@ -1689,7 +1719,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 114 项测试，全部通过。
+> 当前共 115 项测试，全部通过。
 
 ---
 

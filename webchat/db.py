@@ -271,11 +271,17 @@ class PgConnection:
         return _PgCursor(self._raw.executemany(_pg_sql(sql), seq))
 
     def __enter__(self):
-        self._raw.__enter__()
+        # psycopg's native connection context manager closes the connection on
+        # exit. The application uses ``with conn:`` as a transaction boundary,
+        # so the facade must commit/rollback without closing it.
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        return self._raw.__exit__(exc_type, exc, tb)
+        if exc_type is None:
+            self._raw.commit()
+        else:
+            self._raw.rollback()
+        return False
 
     def commit(self) -> None:
         self._raw.commit()

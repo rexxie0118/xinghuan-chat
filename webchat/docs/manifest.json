@@ -6,7 +6,7 @@
       "id": "2026-11-24-29",
       "title": "SQLite → PostgreSQL 全量迁移",
       "date": "2026-11-24",
-      "summary": "pg_migrate 复制控制面 13 张表；dry-run/upsert/skip/verify；KB SQLite 不迁移。",
+      "summary": "pg_migrate 复制控制面 13 张表；本机 PostgreSQL 16 live migration 414 行；KB SQLite 不迁移。",
       "record": "iterations/2026-11-24-29.html",
       "diagrams": [
         "architecture/2026-11-24-postgres-migration.svg"
@@ -709,7 +709,7 @@
       "label": "v40 · PostgreSQL Migration",
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-postgres-migration.svg",
-      "note": "控制面全量迁移脚本已落地；无 live Postgres 验证。"
+      "note": "控制面全量迁移已在本机 PostgreSQL 16 验证；KB 仍为 SQLite。"
     }
   ]
 }
