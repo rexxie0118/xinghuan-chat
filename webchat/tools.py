@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from .observability import AuditLog
+
 import httpx
 
 LOG = logging.getLogger("webchat.tools")
@@ -552,9 +554,16 @@ class MCPClientPool:
 class ToolRegistry:
     """Discovers MCP tools and enforces the configured allowlist."""
 
-    def __init__(self, config: dict[str, Any] | None = None, *, injector: Any = None) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        *,
+        injector: Any = None,
+        audit: AuditLog | None = None,
+    ) -> None:
         self.config = config or {}
         self.injector = injector
+        self.audit = audit
         self.servers = self.config.get("servers") or {}
         self._clients: dict[str, MCPClientPool] = {}
         self._specs: dict[str, ToolSpec] = {}
@@ -691,6 +700,31 @@ class ToolRegistry:
     def get(self, name: str) -> ToolSpec | None:
         return self._specs.get(name)
 
+    def _audit_call(
+        self,
+        *,
+        name: str,
+        server: str,
+        ok: bool,
+        duration: int = 0,
+        error: str = "",
+        arguments: dict[str, Any] | None = None,
+    ) -> None:
+        if self.audit is None:
+            return
+        self.audit.record(
+            event_type="tool_call",
+            component=str(server or "tool"),
+            action=name,
+            status="ok" if ok else "error",
+            duration_ms=duration,
+            failure_class="" if ok else "tool_error",
+            metadata={
+                "argument_keys": sorted((arguments or {}).keys())[:20],
+                "error": error[:300],
+            },
+        )
+
     def call(self, name: str, arguments: dict[str, Any] | None = None) -> ToolResult:
         spec = self._specs.get(name)
         if spec is None:
@@ -714,16 +748,31 @@ class ToolRegistry:
                 raw = self._handlers[name](arguments)
             except Exception as exc:  # noqa: BLE001
                 LOG.warning("plugin tool failed: tool=%s error=%s", name, type(exc).__name__)
+                self._audit_call(
+                    name=name,
+                    server="plugin",
+                    ok=False,
+                    error=f"{type(exc).__name__}: {exc}",
+                    arguments=arguments,
+                )
                 raise ToolError(f"插件工具调用失败：{type(exc).__name__}: {exc}") from exc
             duration = int((time.perf_counter() - started) * 1000)
             if isinstance(raw, ToolResult):
                 raw.duration_ms = duration
+                self._audit_call(
+                    name=name,
+                    server="plugin",
+                    ok=raw.ok,
+                    duration=duration,
+                    error=raw.content if raw.is_error else "",
+                    arguments=arguments,
+                )
                 return raw
             if not isinstance(raw, dict):
                 raw = {"content": str(raw)}
             text, structured = _normalize_content(raw)
             is_error = bool(raw.get("isError"))
-            return ToolResult(
+            result = ToolResult(
                 ok=not is_error,
                 tool=name,
                 content=_truncate(text),
@@ -734,6 +783,15 @@ class ToolRegistry:
                 url=str(raw.get("url") or ""),
                 sources=normalize_sources(raw, fallback_url=str(raw.get("url") or "")),
             )
+            self._audit_call(
+                name=name,
+                server="plugin",
+                ok=result.ok,
+                duration=duration,
+                error=text if is_error else "",
+                arguments=arguments,
+            )
+            return result
         client = self._clients.get(spec.server)
         if client is None:
             raise ToolError(f"MCP server 未连接：{spec.server}")
@@ -741,9 +799,17 @@ class ToolRegistry:
             raw = client.call_tool(spec.raw_name, arguments)
         except ToolError as exc:
             LOG.warning("tool call failed: tool=%s server=%s error=%s", name, spec.server, exc)
+            self._audit_call(name=name, server=spec.server, ok=False, error=str(exc), arguments=arguments)
             raise
         except Exception as exc:  # noqa: BLE001
             LOG.warning("tool call failed: tool=%s server=%s error=%s", name, spec.server, type(exc).__name__)
+            self._audit_call(
+                name=name,
+                server=spec.server,
+                ok=False,
+                error=f"{type(exc).__name__}: {exc}",
+                arguments=arguments,
+            )
             raise ToolError(f"工具调用失败：{type(exc).__name__}: {exc}") from exc
         duration = int((time.perf_counter() - started) * 1000)
         if not isinstance(raw, dict):
@@ -758,7 +824,7 @@ class ToolRegistry:
             duration,
             len(text),
         )
-        return ToolResult(
+        result = ToolResult(
             ok=not is_error,
             tool=name,
             content=_truncate(text),
@@ -769,6 +835,15 @@ class ToolRegistry:
             url=str(raw.get("url") or ""),
             sources=normalize_sources(raw),
         )
+        self._audit_call(
+            name=name,
+            server=spec.server,
+            ok=result.ok,
+            duration=duration,
+            error=text if is_error else "",
+            arguments=arguments,
+        )
+        return result
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -810,14 +885,16 @@ def load_mcp_config(path: Path | str | None) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def build_tool_registry(settings: Any) -> ToolRegistry:
+def build_tool_registry(settings: Any, *, audit: AuditLog | None = None) -> ToolRegistry:
     if not getattr(settings, "tools_enabled", True):
-        return ToolRegistry({})
+        return ToolRegistry({}, audit=audit)
     path = getattr(settings, "mcp_config", None) or (Path(settings.root) / "mcp.json")
     config = load_mcp_config(path)
     from .runtime.injection import FailureInjector
 
-    registry = ToolRegistry(config, injector=FailureInjector.from_env())
+    registry = ToolRegistry(
+        config, injector=FailureInjector.from_env(), audit=audit
+    )
     if config:
         registry.discover()
     return registry

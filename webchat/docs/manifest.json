@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-16",
+      "title": "可观测性与审计",
+      "date": "2026-11-24",
+      "summary": "X-Request-ID、audit_events、api/chat/tool 审计事件、/api/audit 和 /api/metrics。",
+      "record": "iterations/2026-11-24-16.html",
+      "diagrams": [
+        "architecture/2026-11-24-observability.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-15",
       "title": "评测集与失败注入",
       "date": "2026-11-24",
@@ -472,6 +482,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-evals.svg",
       "note": "确定性评测和失败注入已落地；暂无真实 LLM/人工质量评测。"
+    },
+    {
+      "id": "2026-11-24-v27",
+      "label": "v27 · Observability",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-observability.svg",
+      "note": "request id 和 metadata-only 审计已落地；非完整 tracing/metrics 系统。"
     }
   ]
 }

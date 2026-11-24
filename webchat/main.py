@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import re
 import shutil
 import sqlite3
@@ -40,6 +41,7 @@ from .concurrency import ConcurrencyGate, QueueFullError, QueueTimeoutError
 from .connectors import ConnectorError, ConnectorService, known_for, parse_spec, propose_with_llm
 from .config import Settings
 from .db import connect, init_db, is_integrity_error
+from .observability import AuditLog, new_request_id, request_id_var, user_id_var
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
 from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
@@ -262,7 +264,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         queue_timeout=settings.queue_timeout,
         run_timeout=settings.run_timeout,
     )
-    tools = build_tool_registry(settings)
+    audit = AuditLog(settings.db_path)
+    tools = build_tool_registry(settings, audit=audit)
     register_web_tools(tools, settings)
     connector_service = ConnectorService(settings, tools)
     try:
@@ -334,6 +337,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = settings
+    app.state.audit = audit
     app.state.registry = registry
     app.state.kb = registry.get(registry.infos[0].id)
     app.state.sandbox = sandbox
@@ -385,6 +389,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             db.close()
         if user is None:
             raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
+        request.state.user_id = user["id"]
+        user_id_var.set(user["id"])
         return user
 
     User = Depends(current_user)
@@ -714,6 +720,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if connector is None or connector["user_id"] != user["id"]:
             raise HTTPException(status_code=404, detail="连接器不存在")
         return {"connector": connector_service.store.reject(connector_id, user["id"])}
+
+    @app.get("/api/audit")
+    def audit_events(
+        limit: int = Query(default=50, ge=1, le=200),
+        event_type: str = Query(default="", max_length=60),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        return {
+            "events": audit.query(
+                user_id=user["id"], limit=limit, event_type=event_type
+            )
+        }
+
+    @app.get("/api/metrics")
+    def metrics(user: dict[str, Any] = User) -> dict[str, Any]:
+        return audit.metrics(user_id=user["id"])
 
     # ------------------------------------------------------------- runtimes
 
@@ -1322,6 +1344,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 loop.call_soon_threadsafe(queue.put_nowait, (event, data))
 
             def work() -> None:
+                run_started = time.perf_counter()
                 def status(title_text: str, detail: str) -> None:
                     emit("status", {"title": title_text, "detail": detail})
 
@@ -1341,6 +1364,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     wdb = connect(settings.db_path)
                     try:
                         meta = result.message_meta()
+                        meta["request_id"] = getattr(request.state, "request_id", "")
                         execution = (meta or {}).get("execution") or {}
                         if execution.get("run_id"):
                             record_run(
@@ -1383,6 +1407,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 LOG.warning("checkpoint save failed: %s", exc)
                     finally:
                         wdb.close()
+                    audit.record(
+                        event_type="chat_run",
+                        component="agent",
+                        action=str(payload.mode),
+                        status="ok",
+                        duration_ms=int((time.perf_counter() - run_started) * 1000),
+                        metadata={
+                            "answer_mode": meta.get("answer_mode", ""),
+                            "tools_used": meta.get("tools_used") or [],
+                            "tool_steps": meta.get("tool_steps", 0),
+                            "agent_id": meta.get("agent_id", ""),
+                        },
+                        user_id=user["id"],
+                        conversation_id=conversation_id,
+                        run_id=str((meta.get("execution") or {}).get("run_id") or ""),
+                        request_id=getattr(request.state, "request_id", ""),
+                    )
                     emit(
                         "result",
                         {
@@ -1392,6 +1433,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         },
                     )
                 except RunCancelled:
+                    audit.record(
+                        event_type="chat_run",
+                        component="agent",
+                        action=str(payload.mode),
+                        status="cancelled",
+                        duration_ms=int((time.perf_counter() - run_started) * 1000),
+                        failure_class="cancelled",
+                        user_id=user["id"],
+                        conversation_id=conversation_id,
+                        request_id=getattr(request.state, "request_id", ""),
+                    )
                     try:
                         cdb = connect(settings.db_path)
                         try:
@@ -1417,6 +1469,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         emit("error", {"detail": "本次生成已取消"})
                 except Exception as exc:  # noqa: BLE001 - surface a readable error
                     failure = classify_exception(exc)
+                    audit.record(
+                        event_type="chat_run",
+                        component="agent",
+                        action=str(payload.mode),
+                        status="error",
+                        duration_ms=int((time.perf_counter() - run_started) * 1000),
+                        failure_class=failure.kind.value,
+                        metadata={"error": str(exc)[:300]},
+                        user_id=user["id"],
+                        conversation_id=conversation_id,
+                        request_id=getattr(request.state, "request_id", ""),
+                    )
                     LOG.exception("chat failed (%s)", failure.kind.value)
                     try:
                         edb = connect(settings.db_path)
@@ -1557,6 +1621,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(settings.static_dir / "index.html", media_type="text/html")
+
+    @app.middleware("http")
+    async def request_observability(request: Request, call_next):
+        rid = request.headers.get("X-Request-ID") or new_request_id()
+        rid_token = request_id_var.set(rid)
+        request.state.request_id = rid
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            await asyncio.to_thread(
+                audit.record,
+                event_type="api_request",
+                component="http",
+                action=f"{request.method} {request.url.path}"[:160],
+                status="error",
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                failure_class="unhandled",
+                metadata={"path": request.url.path[:300]},
+                user_id=getattr(request.state, "user_id", ""),
+                request_id=rid,
+            )
+            request_id_var.reset(rid_token)
+            raise
+        duration = int((time.perf_counter() - started) * 1000)
+        if request.url.path.startswith("/api/") and request.url.path not in {"/api/health"}:
+            await asyncio.to_thread(
+                audit.record,
+                event_type="api_request",
+                component="http",
+                action=f"{request.method} {request.url.path}"[:160],
+                status="error" if response.status_code >= 500 else "ok",
+                duration_ms=duration,
+                metadata={"status_code": response.status_code},
+                user_id=getattr(request.state, "user_id", ""),
+                request_id=rid,
+            )
+        response.headers["X-Request-ID"] = rid
+        request_id_var.reset(rid_token)
+        return response
 
     @app.middleware("http")
     async def no_stale_shell(request: Request, call_next):

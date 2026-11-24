@@ -157,6 +157,25 @@ SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_connectors_user ON connectors(user_id, updated_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS audit_events (
+        id              TEXT PRIMARY KEY,
+        request_id      TEXT NOT NULL DEFAULT '',
+        user_id         TEXT NOT NULL DEFAULT '',
+        conversation_id TEXT NOT NULL DEFAULT '',
+        run_id          TEXT NOT NULL DEFAULT '',
+        event_type      TEXT NOT NULL,
+        component       TEXT NOT NULL DEFAULT '',
+        action          TEXT NOT NULL DEFAULT '',
+        status          TEXT NOT NULL DEFAULT 'ok',
+        duration_ms     INTEGER NOT NULL DEFAULT 0,
+        failure_class   TEXT NOT NULL DEFAULT '',
+        metadata_json   TEXT NOT NULL DEFAULT '{}',
+        created_at      TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_audit_request ON audit_events(request_id)",
+    "CREATE INDEX IF NOT EXISTS idx_audit_user_created ON audit_events(user_id, created_at DESC)",
 ]
 
 
