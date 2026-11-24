@@ -1789,3 +1789,82 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
   .memory-modal { max-height: 92vh; }
   .memory-head, .memory-body { padding-left: 15px; padding-right: 15px; }
 }
+
+/* ------------------------------------------------------ connector manager */
+.connector-modal {
+  width: min(760px, 100%);
+  max-height: min(820px, 92vh);
+  display: flex; flex-direction: column;
+  padding: 0;
+}
+.connector-head {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 20px 20px 14px; border-bottom: 1px solid var(--line);
+}
+.connector-head h3 { margin: 0; }
+.connector-head p { margin: 5px 0 0; font-size: 10.5px; }
+.connector-close { margin-left: auto; }
+.connector-tabs { display: flex; gap: 4px; padding: 10px 20px 0; border-bottom: 1px solid var(--line); }
+.connector-tab {
+  height: 30px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent;
+  color: var(--faint); background: transparent; font-size: 10px;
+}
+.connector-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.connector-body { overflow-y: auto; padding: 15px 20px 20px; }
+.connector-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.connector-card {
+  padding: 12px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg-soft);
+}
+.connector-card h4 { margin: 0; font-size: 12px; color: var(--text); }
+.connector-card p { margin: 6px 0 0; font-size: 10px; line-height: 1.55; }
+.connector-badge {
+  display: inline-block; padding: 2px 6px; border-radius: 4px;
+  font-size: 8px; color: var(--accent); background: var(--accent-soft);
+}
+.connector-badge.approved { color: #67e8d5; background: rgba(103,232,213,.09); }
+.connector-badge.rejected { color: var(--rose); background: rgba(241,169,180,.08); }
+.connector-badge.draft { color: #f4c47a; background: rgba(244,196,122,.08); }
+.connector-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.connector-actions button { height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 9px; color: var(--muted); }
+.connector-actions button.primary { color: var(--accent); border-color: rgba(140,166,255,.35); background: var(--accent-soft); }
+.connector-actions button.danger { color: var(--rose); border-color: rgba(241,169,180,.25); }
+.connector-actions button:disabled { opacity: .45; cursor: wait; }
+.connector-list { display: flex; flex-direction: column; gap: 8px; }
+.connector-item {
+  padding: 12px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg-soft);
+}
+.connector-item-top { display: flex; align-items: center; gap: 7px; }
+.connector-item-top strong { font-size: 11.5px; }
+.connector-item-top time { margin-left: auto; color: var(--faint); font-size: 8.5px; }
+.connector-url { margin-top: 6px; color: var(--faint); font-size: 9px; word-break: break-all; }
+.connector-test { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.connector-test input {
+  height: 28px; width: 130px; padding: 0 7px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--bg); color: var(--text); font-size: 10px;
+}
+.connector-result {
+  margin: 8px 0 0; padding: 8px; max-height: 150px; overflow: auto;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
+  color: var(--soft); font-family: var(--mono); font-size: 9px; line-height: 1.55; white-space: pre-wrap;
+}
+.connector-propose textarea {
+  width: 100%; min-height: 82px; padding: 10px; resize: vertical;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft);
+  color: var(--text); font-size: 11px; line-height: 1.6;
+}
+.connector-propose-actions { display: flex; gap: 6px; margin-top: 7px; }
+.connector-spec-editor {
+  width: 100%; min-height: 190px; margin-top: 9px; padding: 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: #080c12;
+  color: #a9bdd4; font-family: var(--mono); font-size: 9px; line-height: 1.6;
+}
+.connector-empty { padding: 28px 10px; text-align: center; color: var(--faint); font-size: 11px; line-height: 1.7; }
+.connector-hint { margin-top: 12px; color: var(--faint); font-size: 9px; line-height: 1.6; }
+@media (max-width: 680px) {
+  .connector-grid { grid-template-columns: 1fr; }
+  .connector-modal { max-height: 94vh; }
+  .connector-head, .connector-body { padding-left: 14px; padding-right: 14px; }
+  .connector-tabs { padding-left: 14px; padding-right: 14px; }
+}

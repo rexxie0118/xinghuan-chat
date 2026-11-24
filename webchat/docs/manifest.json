@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-05",
+      "title": "连接器管理 UI",
+      "date": "2026-11-24",
+      "summary": "新增连接器管理弹窗：目录、AI 生成、草稿、测试、通过注册和拒绝。",
+      "record": "iterations/2026-11-24-05.html",
+      "diagrams": [
+        "architecture/2026-11-24-connector-ui.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-04",
       "title": "声明式联网连接器",
       "date": "2026-11-24",
@@ -292,6 +302,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-connector-factory.svg",
       "note": "声明式连接器已落地；无连接器管理 UI。"
+    },
+    {
+      "id": "2026-11-24-v17",
+      "label": "v17 · Connector UI",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-connector-ui.svg",
+      "note": "连接器管理 UI 已落地；外部来源引用仍待做。"
     }
   ]
 }

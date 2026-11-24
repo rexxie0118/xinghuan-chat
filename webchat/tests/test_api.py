@@ -88,9 +88,16 @@ class ApiTest(unittest.TestCase):
             page = client.get("/")
             self.assertEqual(page.status_code, 200)
             self.assertIn('id="memory-btn"', page.text)
+            self.assertIn('id="connector-btn"', page.text)
             js = client.get("/static/app.js")
             self.assertEqual(js.status_code, 200)
             self.assertIn("openMemoryManager", js.text)
+            self.assertIn("openConnectorManager", js.text)
+
+            self.login(client)
+            catalog = client.get("/api/connectors/catalog")
+            self.assertEqual(catalog.status_code, 200)
+            self.assertTrue(any(c["name"] == "weather_current" for c in catalog.json()["connectors"]))
 
     def test_user_memory_crud(self):
         with TestClient(self.app) as client:

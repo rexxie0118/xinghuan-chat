@@ -523,6 +523,12 @@ GET /api/containers/pool
 → Agent Tool Loop 调用
 ```
 
+Topbar「连接器」打开管理 UI：
+
+- 目录：浏览内置 Open-Meteo；
+- 我的连接器：测试、通过并注册、拒绝；
+- AI 生成：输入需求，查已知或生成 spec，编辑后保存草稿。
+
 API：
 
 ```http

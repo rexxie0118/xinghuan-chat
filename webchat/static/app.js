@@ -2346,6 +2346,265 @@
     return root;
   }
 
+  function connectorDate(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return `${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+
+  async function openConnectorManager() {
+    const root = modalShell();
+    const card = document.createElement("div");
+    card.className = "modal-card connector-modal";
+    card.innerHTML = `
+      <div class="connector-head">
+        <div>
+          <p class="eyebrow">CONNECTORS</p>
+          <h3>联网连接器</h3>
+          <p>先查目录，再生成声明式 spec；测试、审批后才会进入 Tool Loop。</p>
+        </div>
+        <button class="icon-btn connector-close" type="button" aria-label="关闭连接器">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div class="connector-tabs">
+        <button class="connector-tab active" data-connector-tab="catalog" type="button">目录</button>
+        <button class="connector-tab" data-connector-tab="mine" type="button">我的连接器</button>
+        <button class="connector-tab" data-connector-tab="propose" type="button">AI 生成</button>
+      </div>
+      <div class="connector-body"></div>
+      <p class="connector-hint" style="padding:0 20px 16px">只允许 HTTPS、固定 host allowlist、GET/POST；审批前不会注册工具。</p>
+    `;
+    root.append(card);
+    const close = () => { root.hidden = true; };
+    card.querySelector(".connector-close").addEventListener("click", close);
+    root.onclick = (event) => { if (event.target === root) close(); };
+
+    const body = card.querySelector(".connector-body");
+    let catalog = [];
+    let connectors = [];
+    let activeTab = "catalog";
+    let proposed = null;
+
+    function setTab(tab) {
+      activeTab = tab;
+      card.querySelectorAll("[data-connector-tab]").forEach((item) => {
+        item.classList.toggle("active", item.dataset.connectorTab === tab);
+      });
+      render();
+    }
+
+    function setResult(item, payload, isError = false) {
+      const box = item.querySelector(".connector-result");
+      if (!box) return;
+      box.hidden = false;
+      box.textContent = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+      box.style.color = isError ? "var(--rose)" : "var(--soft)";
+    }
+
+    function renderCatalog() {
+      if (!catalog.length) {
+        body.innerHTML = `<div class="connector-empty">目录为空。</div>`;
+        return;
+      }
+      body.innerHTML = `<div class="connector-grid">${catalog.map((spec, index) => `
+        <article class="connector-card">
+          <div class="connector-item-top">
+            <strong>${escapeHtml(spec.name)}</strong>
+            <span class="connector-badge">KNOWN</span>
+          </div>
+          <p>${escapeHtml(spec.description || "")}</p>
+          <div class="connector-url">${escapeHtml(spec.base_url || "")}</div>
+          <div class="connector-actions">
+            <button class="primary" data-connector-add="${index}" type="button">添加草稿</button>
+          </div>
+        </article>`).join("")}</div>`;
+    }
+
+    function renderMine() {
+      if (!connectors.length) {
+        body.innerHTML = `<div class="connector-empty">还没有连接器。<br>从「目录」添加天气连接器，或在「AI 生成」里描述一个 API。</div>`;
+        return;
+      }
+      body.innerHTML = `<div class="connector-list">${connectors.map((connector) => {
+        const spec = connector.spec || {};
+        const params = Object.entries(spec.params || {});
+        const status = connector.status || "draft";
+        return `
+          <article class="connector-item" data-connector-id="${escapeHtml(connector.id)}">
+            <div class="connector-item-top">
+              <strong>${escapeHtml(spec.name || connector.name)}</strong>
+              <span class="connector-badge ${escapeHtml(status)}">${status === "approved" ? "已注册" : status === "rejected" ? "已拒绝" : "草稿"}</span>
+              <time>${connectorDate(connector.updated_at)}</time>
+            </div>
+            <p>${escapeHtml(spec.description || connector.description || "")}</p>
+            <div class="connector-url">${escapeHtml((spec.base_url || "") + (spec.path || ""))}</div>
+            ${status === "approved" ? `<div class="connector-url">tool: ${escapeHtml("connector." + (spec.name || connector.name))}</div>` : ""}
+            <div class="connector-test">
+              ${params.map(([name, config]) => `<input data-connector-arg="${escapeHtml(name)}" type="${config.type === "number" ? "number" : "text"}" placeholder="${escapeHtml(config.description || name)}">`).join("")}
+              <button data-connector-test type="button">测试</button>
+            </div>
+            <div class="connector-actions">
+              ${status !== "approved" ? `<button class="primary" data-connector-approve type="button">通过并注册</button>` : ""}
+              ${status !== "rejected" ? `<button class="danger" data-connector-reject type="button">拒绝</button>` : ""}
+            </div>
+            <pre class="connector-result" hidden></pre>
+          </article>`;
+      }).join("")}</div>`;
+    }
+
+    function renderPropose() {
+      body.innerHTML = `
+        <div class="connector-propose">
+          <textarea id="connector-query" maxlength="800" placeholder="描述你需要的只读 API，例如：查询北京天气；或提供一个 HTTPS OpenAPI 端点"></textarea>
+          <div class="connector-propose-actions">
+            <button class="btn primary" id="connector-propose-btn" type="button">查找 / 生成</button>
+          </div>
+          <div id="connector-propose-output"></div>
+        </div>`;
+      const output = body.querySelector("#connector-propose-output");
+      if (proposed) {
+        if (proposed.source === "known") {
+          output.innerHTML = `<div class="connector-grid" style="margin-top:10px">${(proposed.specs || []).map((spec, index) => `
+            <article class="connector-card">
+              <strong>${escapeHtml(spec.name)}</strong>
+              <p>${escapeHtml(spec.description || "")}</p>
+              <div class="connector-actions"><button class="primary" data-connector-add="${index}" data-proposed="1" type="button">添加草稿</button></div>
+            </article>`).join("")}</div>`;
+        } else {
+          const editor = document.createElement("textarea");
+          editor.className = "connector-spec-editor";
+          editor.value = JSON.stringify(proposed.spec, null, 2);
+          output.append(editor);
+          const save = document.createElement("button");
+          save.className = "btn primary";
+          save.type = "button";
+          save.textContent = "保存草稿";
+          save.style.marginTop = "7px";
+          save.addEventListener("click", async () => {
+            try {
+              const spec = JSON.parse(editor.value);
+              await addSpec(spec);
+            } catch (err) {
+              toast(err.message || "JSON 不合法", "error");
+            }
+          });
+          output.append(save);
+        }
+      }
+      const button = body.querySelector("#connector-propose-btn");
+      button.addEventListener("click", async () => {
+        const query = body.querySelector("#connector-query").value.trim();
+        if (!query) return;
+        button.disabled = true;
+        try {
+          proposed = await api("/api/connectors/propose", { method: "POST", body: { query } });
+          renderPropose();
+          body.querySelector("#connector-query").value = query;
+        } catch (err) {
+          toast(err.message, "error");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    }
+
+    function render() {
+      if (activeTab === "catalog") renderCatalog();
+      else if (activeTab === "mine") renderMine();
+      else renderPropose();
+    }
+
+    async function refresh() {
+      try {
+        const [catalogData, mineData] = await Promise.all([
+          api("/api/connectors/catalog"),
+          api("/api/connectors"),
+        ]);
+        catalog = catalogData.connectors || [];
+        connectors = mineData.connectors || [];
+        render();
+      } catch (err) {
+        body.innerHTML = `<div class="connector-empty">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function addSpec(spec) {
+      try {
+        await api("/api/connectors", { method: "POST", body: { spec } });
+        toast("已添加连接器草稿");
+        activeTab = "mine";
+        card.querySelectorAll("[data-connector-tab]").forEach((item) => {
+          item.classList.toggle("active", item.dataset.connectorTab === "mine");
+        });
+        await refresh();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    card.addEventListener("click", async (event) => {
+      const add = event.target.closest("[data-connector-add]");
+      if (add) {
+        const index = Number(add.dataset.connectorAdd);
+        const spec = add.dataset.proposed && proposed ? (proposed.specs || [])[index] : catalog[index];
+        if (spec) await addSpec(spec);
+        return;
+      }
+      const item = event.target.closest("[data-connector-id]");
+      if (!item) return;
+      const id = item.dataset.connectorId;
+      const testButton = event.target.closest("[data-connector-test]");
+      if (testButton) {
+        const arguments_ = {};
+        item.querySelectorAll("[data-connector-arg]").forEach((input) => {
+          if (input.value !== "") arguments_[input.dataset.connectorArg] = input.value;
+        });
+        testButton.disabled = true;
+        testButton.textContent = "测试中…";
+        try {
+          const data = await api(`/api/connectors/${encodeURIComponent(id)}/test`, {
+            method: "POST",
+            body: { arguments: arguments_ },
+          });
+          setResult(item, data.result);
+          toast("测试成功");
+        } catch (err) {
+          setResult(item, err.message, true);
+        } finally {
+          testButton.disabled = false;
+          testButton.textContent = "测试";
+        }
+        return;
+      }
+      if (event.target.closest("[data-connector-approve]")) {
+        try {
+          const data = await api(`/api/connectors/${encodeURIComponent(id)}/approve`, { method: "POST" });
+          toast(`已注册 ${data.tool}`);
+          await refresh();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+        return;
+      }
+      if (event.target.closest("[data-connector-reject]")) {
+        if (!window.confirm("拒绝这个连接器？它不会注册为工具。")) return;
+        try {
+          await api(`/api/connectors/${encodeURIComponent(id)}/reject`, { method: "POST" });
+          toast("已拒绝");
+          await refresh();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+    });
+
+    card.querySelectorAll("[data-connector-tab]").forEach((tab) => {
+      tab.addEventListener("click", () => setTab(tab.dataset.connectorTab));
+    });
+    await refresh();
+  }
+
   function memoryKindLabel(kind) {
     return { fact: "事实", preference: "偏好", task: "任务" }[kind] || kind;
   }
@@ -3263,6 +3522,11 @@
   // Delegated fallback: the memory entry is also reachable if an earlier
   // binding throws or a stale app.js is cached.
   document.addEventListener("click", (event) => {
+    if (event.target.closest("#connector-btn")) {
+      event.preventDefault();
+      openConnectorManager();
+      return;
+    }
     if (!event.target.closest("#memory-btn")) return;
     event.preventDefault();
     openMemoryManager();
