@@ -1017,7 +1017,9 @@ WEBCHAT_WEB_ALLOW_HOSTS=
 - 禁止重定向；
 - 最大响应 512KB；
 - 正文最多 12000 字符；
-- 结果包含标题、URL、发布时间、domain、tier、trust_score。
+- 结果包含标题、URL、发布时间、domain、tier、trust_score；
+- 外部工具来源会进入 `citations`，带可点击 URL；
+- 引用面板的「打开原文」会打开外部来源。
 
 来源评分：
 

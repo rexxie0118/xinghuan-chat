@@ -1880,3 +1880,5 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
 .live-toggle:hover { color: var(--text); border-color: var(--line-strong); }
 .live-toggle.active { color: var(--accent); border-color: rgba(140,166,255,.35); background: var(--accent-soft); }
 .live-toggle[hidden] { display: none; }
+.citation-source-line { margin: 8px 0 0; color: var(--faint); font-size: 9px; }
+.modal-actions .btn.ghost { text-decoration: none; display: inline-flex; align-items: center; }

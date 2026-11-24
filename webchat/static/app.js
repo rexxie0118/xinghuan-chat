@@ -1931,7 +1931,24 @@
     `;
     card.querySelector(".citation-title").textContent =
       citation.label || `《${citation.doc_title || "文档"}》`;
-    card.querySelector(".citation-snippet").textContent = citation.snippet || "";
+    const snippetEl = card.querySelector(".citation-snippet");
+    snippetEl.textContent = citation.snippet || "";
+    if (citation.url) {
+      const sourceLine = document.createElement("p");
+      sourceLine.className = "citation-source-line";
+      sourceLine.textContent = `${citation.domain || ""}${citation.published_at ? ` · ${citation.published_at.slice(0, 10)}` : ""}`;
+      snippetEl.after(sourceLine);
+    }
+    const actions = card.querySelector(".modal-actions");
+    if (citation.url && /^https?:\/\//i.test(citation.url)) {
+      const link = document.createElement("a");
+      link.className = "btn ghost";
+      link.href = citation.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "打开原文";
+      actions.prepend(link);
+    }
     card.querySelector("button").addEventListener("click", () => {
       root.hidden = true;
     });

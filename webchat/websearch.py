@@ -401,7 +401,12 @@ class WebResearchService:
         freshness = str(args.get("freshness") or "week")
         limit = max(1, min(int(args.get("limit") or 5), MAX_RESULTS))
         results = self.search.search(query, freshness=freshness, limit=limit)
-        return {"results": [r.__dict__ for r in results], "query": query}
+        items = []
+        for index, result in enumerate(results, 1):
+            item = result.__dict__
+            item["index"] = index
+            items.append(item)
+        return {"results": items, "query": query}
 
     def fetch_tool(self, args: dict[str, Any]) -> dict[str, Any]:
         url = str(args.get("url") or "").strip()
@@ -441,6 +446,8 @@ class WebResearchService:
                     }
                 )
         ranked = source_rank(pages)
+        for index, source in enumerate(ranked, 1):
+            source["index"] = index
         conflicts = conflict_detect(ranked)
         return {
             "query": query,

@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-09",
+      "title": "外部来源引用",
+      "date": "2026-11-24",
+      "summary": "工具结果 URL 进入 citations；引用面板显示来源域名/日期和打开原文链接。",
+      "record": "iterations/2026-11-24-09.html",
+      "diagrams": [
+        "architecture/2026-11-24-external-citations.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-08",
       "title": "Web Research 工具链",
       "date": "2026-11-24",
@@ -353,6 +363,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-web-research.svg",
       "note": "搜索/抓取/评分/冲突检测已落地；需要配置 Tavily 或 SearXNG。"
+    },
+    {
+      "id": "2026-11-24-v20",
+      "label": "v20 · External Citations",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-external-citations.svg",
+      "note": "外部来源引用已落地；混合 KB/web 引用优先级仍简单。"
     }
   ]
 }

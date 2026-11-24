@@ -93,6 +93,7 @@ class ToolResult:
     duration_ms: int = 0
     is_error: bool = False
     structured: Any = None
+    url: str = ""
 
     def public(self) -> dict[str, Any]:
         out = {
@@ -105,6 +106,8 @@ class ToolResult:
         }
         if self.structured is not None:
             out["structured"] = self.structured
+        if self.url:
+            out["url"] = self.url
         return out
 
 
@@ -398,6 +401,8 @@ class HttpMCPClient(MCPClient):
 def _normalize_content(result: dict[str, Any]) -> tuple[str, Any]:
     content = result.get("content")
     structured = result.get("structuredContent")
+    if structured is None:
+        structured = result.get("structured")
     if isinstance(content, list):
         parts: list[str] = []
         for item in content:
@@ -645,6 +650,7 @@ class ToolRegistry:
                 duration_ms=duration,
                 is_error=is_error,
                 structured=structured,
+                url=str(raw.get("url") or ""),
             )
         client = self._clients.get(spec.server)
         if client is None:
