@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-25",
+      "title": "记忆评测集 P2",
+      "date": "2026-11-24",
+      "summary": "约束/过期/范围/审批/来源/回滚六个确定性 memory eval，CLI + unittest。",
+      "record": "iterations/2026-11-24-25.html",
+      "diagrams": [
+        "architecture/2026-11-24-memory-evals.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-24",
       "title": "共享记忆审批、审计回滚与后台整理",
       "date": "2026-11-24",
@@ -625,6 +635,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-memory-approval.svg",
       "note": "审批、删除回滚和后台整理已落地；共享整理和 dry-run 待办。"
+    },
+    {
+      "id": "2026-11-24-v36",
+      "label": "v36 · Memory Evals",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-memory-evals.svg",
+      "note": "记忆行为评测已接入 CI；尚未接 LoCoMo/LongMemEval。"
     }
   ]
 }

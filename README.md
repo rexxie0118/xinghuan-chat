@@ -55,6 +55,7 @@ python3 -m venv .venv
 - 记忆质量：近重复合并、置信度门槛、整理/预算
 - 记忆 scope/provenance：个人/部门/全公司 + 来源
 - 共享记忆审批、审计回滚、后台整理任务
+- 记忆评测：约束/过期/范围/审批/来源/回滚
 - 知识库文档管理：上传/删除/重建索引
 - Office 解析：PDF/DOCX/PPTX/XLSX/XLS
 - Apple Container 预热池：warm/lease/quota
