@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-21",
+      "title": "PPTX / Excel 解析依赖与入库",
+      "date": "2026-11-24",
+      "summary": "安装 python-pptx/openpyxl/xlrd；新增 PPTX/Excel 解析并接入知识库上传。",
+      "record": "iterations/2026-11-24-21.html",
+      "diagrams": [
+        "architecture/2026-11-24-office.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-20",
       "title": "知识库文档管理 UI",
       "date": "2026-11-24",
@@ -557,6 +567,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-kb-docs.svg",
       "note": "KB 文档上传、删除、重建索引 UI/API 已落地。"
+    },
+    {
+      "id": "2026-11-24-v32",
+      "label": "v32 · Office Parsers",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-office.svg",
+      "note": "PPTX/XLSX/XLS 已支持，图片和扫描件仍不做 OCR。"
     }
   ]
 }

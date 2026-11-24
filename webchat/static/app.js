@@ -2405,7 +2405,7 @@
         <select data-kb-select aria-label="知识库"></select>
         <label class="kb-upload-label" data-kb-upload hidden>
           上传文档
-          <input type="file" accept=".md,.markdown,.txt,.text,.rst,.pdf,.docx" data-kb-file />
+          <input type="file" accept=".md,.markdown,.txt,.text,.rst,.pdf,.docx,.pptx,.xlsx,.xlsm,.xls" data-kb-file />
         </label>
         <button class="kb-reindex" type="button" data-kb-reindex hidden>重建索引</button>
       </div>

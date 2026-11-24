@@ -156,6 +156,141 @@ def parse_docx(path: Path) -> ParsedDoc:
     return ParsedDoc(title=title or path.stem, text=text, doc_type="doc")
 
 
+
+
+# ---------------------------------------------------------------- PPTX
+
+def _table_markdown(rows: list[list[str]]) -> str:
+    rows = [[str(cell or "").replace("\n", " ").strip() for cell in row] for row in rows]
+    rows = [row for row in rows if any(row)]
+    if not rows:
+        return ""
+    width = max(len(row) for row in rows)
+    rows = [row + [""] * (width - len(row)) for row in rows]
+    head = "| " + " | ".join(rows[0]) + " |"
+    sep = "| " + " | ".join("---" for _ in range(width)) + " |"
+    return "\n".join([head, sep] + ["| " + " | ".join(row) + " |" for row in rows[1:]])
+
+
+def _pptx_shape_text(shape, out: list[str]) -> None:
+    if getattr(shape, "has_table", False):
+        rows = [[cell.text for cell in row.cells] for row in shape.table.rows]
+        table = _table_markdown(rows)
+        if table:
+            out.append(table)
+        return
+    if getattr(shape, "has_text_frame", False):
+        for paragraph in shape.text_frame.paragraphs:
+            line = (paragraph.text or "").strip()
+            if line:
+                out.append(line)
+    if hasattr(shape, "shapes"):
+        for child in shape.shapes:
+            _pptx_shape_text(child, out)
+
+
+def parse_pptx(path: Path) -> ParsedDoc:
+    try:
+        from pptx import Presentation
+    except ImportError as exc:  # pragma: no cover - 取决于环境
+        raise ParserUnavailable(
+            "解析 PPTX 需要 python-pptx：pip install python-pptx"
+        ) from exc
+
+    prs = Presentation(str(path))
+    blocks = [f"# {path.stem}"]
+    for index, slide in enumerate(prs.slides, 1):
+        if index > 500:
+            blocks.append(f"## 第 {index} 页以后已截断")
+            break
+        lines: list[str] = []
+        for shape in slide.shapes:
+            _pptx_shape_text(shape, lines)
+        try:
+            notes = (slide.notes_slide.notes_text_frame.text or "").strip()
+        except Exception:  # noqa: BLE001
+            notes = ""
+        if notes:
+            lines.append("备注：" + notes.replace("\n", " "))
+        if lines:
+            blocks.append(f"## 第 {index} 页\n" + "\n".join(lines))
+    text = "\n\n".join(blocks).strip()
+    if len(blocks) == 1:
+        raise ValueError(f"{path.name}: 演示文稿没有可提取的文本")
+    title = ""
+    try:
+        title = (prs.core_properties.title or "").strip()
+    except Exception:  # noqa: BLE001
+        title = ""
+    return ParsedDoc(title=title or path.stem, text=text, doc_type="slides")
+
+
+# ---------------------------------------------------------------- Excel
+
+MAX_SHEET_ROWS = 2000
+MAX_SHEET_COLS = 60
+
+
+def _sheet_markdown(rows: list[list[str]]) -> str:
+    trimmed = []
+    for row in rows[:MAX_SHEET_ROWS]:
+        values = [str(value if value is not None else "").strip() for value in row[:MAX_SHEET_COLS]]
+        if any(values):
+            trimmed.append(values)
+    if not trimmed:
+        return ""
+    text = _table_markdown(trimmed)
+    if len(rows) > MAX_SHEET_ROWS:
+        text += f"\n\n> 表格超过 {MAX_SHEET_ROWS} 行，已截断"
+    return text
+
+
+def parse_xlsx(path: Path) -> ParsedDoc:
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:  # pragma: no cover - 取决于环境
+        raise ParserUnavailable(
+            "解析 XLSX 需要 openpyxl：pip install openpyxl"
+        ) from exc
+
+    workbook = load_workbook(str(path), read_only=True, data_only=True)
+    blocks = [f"# {path.stem}"]
+    try:
+        for sheet in workbook.worksheets:
+            rows = [[cell for cell in row] for row in sheet.iter_rows(values_only=True)]
+            table = _sheet_markdown(rows)
+            if table:
+                blocks.append(f"## 工作表：{sheet.title}\n{table}")
+    finally:
+        workbook.close()
+    if len(blocks) == 1:
+        raise ValueError(f"{path.name}: 工作簿没有可提取的文本")
+    return ParsedDoc(title=path.stem, text="\n\n".join(blocks), doc_type="sheet")
+
+
+def parse_xls(path: Path) -> ParsedDoc:
+    try:
+        import xlrd
+    except ImportError as exc:  # pragma: no cover - 取决于环境
+        raise ParserUnavailable(
+            "解析 XLS 需要 xlrd：pip install xlrd"
+        ) from exc
+
+    workbook = xlrd.open_workbook(str(path), on_demand=True)
+    blocks = [f"# {path.stem}"]
+    try:
+        for sheet in workbook.sheets():
+            rows = [sheet.row_values(i) for i in range(sheet.nrows)]
+            table = _sheet_markdown(rows)
+            if table:
+                blocks.append(f"## 工作表：{sheet.name}\n{table}")
+    finally:
+        workbook.release_resources()
+    if len(blocks) == 1:
+        raise ValueError(f"{path.name}: 工作簿没有可提取的文本")
+    return ParsedDoc(title=path.stem, text="\n\n".join(blocks), doc_type="sheet")
+
+
 # ---------------------------------------------------------------- 注册表
 
 _REGISTRY: dict[str, Callable[[Path], ParsedDoc]] = {}
@@ -186,3 +321,6 @@ def parse_file(path: Path) -> ParsedDoc:
 register(TEXT_SUFFIXES, parse_text)
 register({".pdf"}, parse_pdf)
 register({".docx"}, parse_docx)
+register({".pptx"}, parse_pptx)
+register({".xlsx", ".xlsm"}, parse_xlsx)
+register({".xls"}, parse_xls)
