@@ -189,6 +189,20 @@ SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_audit_request ON audit_events(request_id)",
     "CREATE INDEX IF NOT EXISTS idx_audit_user_created ON audit_events(user_id, created_at DESC)",
     """
+    CREATE TABLE IF NOT EXISTS memory_attachments (
+        id          TEXT PRIMARY KEY,
+        memory_id   TEXT NOT NULL REFERENCES user_memories(id) ON DELETE CASCADE,
+        user_id     TEXT NOT NULL DEFAULT '',
+        kind        TEXT NOT NULL DEFAULT 'document',
+        filename    TEXT NOT NULL,
+        mime        TEXT NOT NULL DEFAULT 'application/octet-stream',
+        path        TEXT NOT NULL,
+        caption     TEXT NOT NULL DEFAULT '',
+        created_at  TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_memory_attachments_memory ON memory_attachments(memory_id, created_at DESC)",
+    """
     CREATE TABLE IF NOT EXISTS department_agents (
         id          TEXT PRIMARY KEY,
         department  TEXT NOT NULL,

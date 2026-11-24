@@ -1386,6 +1386,47 @@ manager 审批 → authority=1
 删除是硬删除；审计事件保存删除前 snapshot，可通过 `/api/audit/{event_id}/undo` 恢复。  
 后台任务按 `WEBCHAT_MEMORY_CONSOLIDATE_INTERVAL` 定期整理个人记忆（默认 86400 秒）。
 
+### 时间线记忆图谱
+
+记忆已有 `valid_from / valid_to / superseded_by`，现在可以查询时间线：
+
+```http
+GET /api/memories/graph?as_of=2026-11-01&agent_id=&query=
+```
+
+返回：
+
+```text
+nodes   实体节点
+edges   subject / predicate / object
+        valid_from / valid_to
+        current / historical / pending / rejected
+```
+
+UI「记忆 → 时间线」支持按截止日期查看某时刻的事实。
+
+### 多模态记忆附件
+
+记忆可以挂载图片 / 音频 / 视频 / PDF：
+
+```http
+POST /api/memories/{id}/attachments
+GET  /api/memories/{id}/attachments
+GET  /api/memories/attachments/{attachment_id}/file
+```
+
+字段：
+
+```text
+kind / filename / mime / path / caption
+```
+
+当前是**附件归档 + caption 文本检索**，不是视觉 embedding：
+
+- 不做图片内容理解；
+- 不做音频/视频转写；
+- 不做跨模态向量召回。
+
 ### 团队记忆管理
 
 顶部「团队记忆」仅 admin / manager 可见：
@@ -1781,7 +1822,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 118 项测试，全部通过。
+> 当前共 121 项测试，全部通过。
 
 ---
 

@@ -2025,3 +2025,17 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
 @media (max-width: 620px) {
   .team-memory-head, .team-memory-toolbar, .team-memory-body { padding-left: 14px; padding-right: 14px; }
 }
+
+/* ------------------------------------------------------- memory timeline */
+.memory-date {
+  height: 24px; padding: 0 6px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--bg-soft); color: var(--text); font-size: 9px;
+}
+.timeline-list { display: flex; flex-direction: column; gap: 7px; }
+.timeline-card { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg-soft); }
+.timeline-card p { margin: 7px 0 0; font-size: 11px; line-height: 1.55; }
+.timeline-status { padding: 2px 6px; border-radius: 4px; font-size: 8.5px; border: 1px solid var(--line); color: var(--faint); }
+.timeline-status.current { color: #7fe0b0; }
+.timeline-status.historical { color: #f4c47a; }
+.timeline-status.pending { color: var(--accent); }
+.timeline-status.rejected { color: #f4a3a3; }

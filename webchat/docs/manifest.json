@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-32",
+      "title": "时间线记忆图谱 / 多模态附件",
+      "date": "2026-11-24",
+      "summary": "temporal graph as_of；记忆附件归档/caption；未做视觉/音频 embedding。",
+      "record": "iterations/2026-11-24-32.html",
+      "diagrams": [
+        "architecture/2026-11-24-temporal-memory.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-31",
       "title": "队列可靠性：lease / retry / DLQ",
       "date": "2026-11-24",
@@ -744,6 +754,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-queue-reliability.svg",
       "note": "lease/retry/DLQ 已落地；非 exactly-once，多 Worker 未压测。"
+    },
+    {
+      "id": "2026-11-24-v43",
+      "label": "v43 · Temporal Memory",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-temporal-memory.svg",
+      "note": "时间线事实和附件归档已落地；跨模态 embedding 未做。"
     }
   ]
 }

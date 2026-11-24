@@ -2388,6 +2388,65 @@
     return root;
   }
 
+  async function openMemoryTimeline() {
+    const root = modalShell();
+    const card = document.createElement("div");
+    card.className = "modal-card memory-modal";
+    card.innerHTML = `
+      <div class="memory-head">
+        <div>
+          <p class="eyebrow">TEMPORAL MEMORY</p>
+          <h3>记忆时间线</h3>
+          <p>从 subject / predicate / valid_from / valid_to 生成；历史值不会消失。</p>
+        </div>
+        <button class="icon-btn memory-close" type="button" aria-label="关闭时间线">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div class="memory-body">
+        <div class="memory-filters">
+          <input type="date" class="memory-date" aria-label="截止日期" />
+          <button class="memory-filter" type="button" data-timeline-now>当前</button>
+          <span class="memory-count"></span>
+        </div>
+        <div class="timeline-list"></div>
+      </div>`;
+    root.append(card);
+    const close = () => { root.hidden = true; };
+    card.querySelector(".memory-close").addEventListener("click", close);
+    root.onclick = (event) => { if (event.target === root) close(); };
+    const dateInput = card.querySelector(".memory-date");
+    const list = card.querySelector(".timeline-list");
+    const count = card.querySelector(".memory-count");
+
+    async function refresh() {
+      const params = new URLSearchParams();
+      if (dateInput.value) params.set("as_of", dateInput.value);
+      const data = await api(`/api/memories/graph?${params.toString()}`);
+      count.textContent = `${data.edges.length} 条事实`;
+      if (!data.edges.length) {
+        list.innerHTML = `<div class="memory-empty">还没有带 subject/predicate 的时间线事实。</div>`;
+        return;
+      }
+      list.innerHTML = data.edges.map((edge) => `
+        <article class="timeline-card">
+          <div class="memory-card-top">
+            <span class="timeline-status ${escapeHtml(edge.status)}">${escapeHtml(edge.status)}</span>
+            <span class="memory-scope">${memoryScopeLabel(edge.scope)}</span>
+            <time>${escapeHtml((edge.valid_from || "").slice(0, 10))} → ${escapeHtml(edge.valid_to ? edge.valid_to.slice(0, 10) : "现在")}</time>
+          </div>
+          <p><strong>${escapeHtml(edge.subject)}</strong> · ${escapeHtml(edge.predicate)} · <strong>${escapeHtml(edge.object)}</strong></p>
+          <div class="memory-source">${edge.agent_id ? `Agent ${escapeHtml(edge.agent_id)} · ` : ""}权威性 ${edge.authority || 0} · 置信度 ${Number(edge.confidence || 0).toFixed(2)}</div>
+        </article>`).join("");
+    }
+    card.querySelector("[data-timeline-now]").addEventListener("click", async () => {
+      dateInput.value = "";
+      await refresh();
+    });
+    dateInput.addEventListener("change", refresh);
+    await refresh();
+  }
+
   async function openTeamMemory() {
     const root = modalShell();
     const card = document.createElement("div");
@@ -3079,6 +3138,7 @@
           <button class="memory-filter" data-memory-filter="org" type="button">全公司</button>
           <button class="memory-consolidate" type="button" data-memory-consolidate title="合并近重复并清理过期低价值记忆">整理</button>
           <button class="memory-consolidate" type="button" data-memory-undo title="撤销最近一次记忆删除">撤销删除</button>
+          <button class="memory-consolidate" type="button" data-memory-timeline title="查看记忆事实的时间线">时间线</button>
           <span class="memory-count"></span>
         </div>
         <div class="memory-list"></div>
@@ -3096,6 +3156,7 @@
     const statsEl = card.querySelector(".memory-stats");
     const consolidateBtn = card.querySelector("[data-memory-consolidate]");
     const undoBtn = card.querySelector("[data-memory-undo]");
+    const timelineBtn = card.querySelector("[data-memory-timeline]");
     const form = card.querySelector(".memory-form");
     const input = form.querySelector("input");
     const kind = form.querySelector("select[aria-label='记忆类型']");
@@ -3209,6 +3270,8 @@
         button.disabled = false;
       }
     });
+
+    timelineBtn.addEventListener("click", () => openMemoryTimeline());
 
     undoBtn.addEventListener("click", async () => {
       undoBtn.disabled = true;

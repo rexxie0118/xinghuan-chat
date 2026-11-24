@@ -112,6 +112,32 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             self.assertTrue(any(u["role"] == "admin" for u in allowed.json()["users"]))
 
+    def test_temporal_graph_and_attachment_api(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            created = client.post(
+                "/api/memories",
+                json={
+                    "kind": "fact", "content": "项目负责人是张三",
+                    "subject": "项目", "predicate": "负责人", "object_text": "张三",
+                },
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            memory = created.json()["memory"]
+            graph = client.get("/api/memories/graph")
+            self.assertEqual(graph.status_code, 200)
+            self.assertTrue(any(edge["subject"] == "项目" for edge in graph.json()["edges"]))
+            uploaded = client.post(
+                f"/api/memories/{memory['id']}/attachments",
+                files={"file": ("demo.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+                data={"caption": "架构图"},
+            )
+            self.assertEqual(uploaded.status_code, 200, uploaded.text)
+            attachments = client.get(f"/api/memories/{memory['id']}/attachments")
+            self.assertEqual(attachments.status_code, 200)
+            self.assertEqual(attachments.json()["attachments"][0]["caption"], "架构图")
+            client.delete(f"/api/memories/{memory['id']}")
+
     def test_team_memory_api_requires_manager_or_admin(self):
         with TestClient(self.app) as client:
             self.login(client)

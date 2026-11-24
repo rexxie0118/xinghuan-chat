@@ -17,7 +17,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
@@ -65,7 +65,7 @@ from .security import (
     token_digest,
     verify_password,
 )
-from .util import expires_at
+from .util import expires_at, new_id
 
 LOG = logging.getLogger("webchat")
 
@@ -730,6 +730,93 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             key = f"{row.get('scope', '')}:{row.get('status', '')}"
             counts[key] = counts.get(key, 0) + 1
         return {"memories": rows, "counts": counts}
+
+    @app.get("/api/memories/graph")
+    def memory_graph(
+        as_of: str = Query(default="", max_length=40),
+        query: str = Query(default="", max_length=200),
+        agent_id: str = Query(default="", max_length=80),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        return memory_store.temporal_graph(
+            user["id"], user=user, agent_id=agent_id, as_of=as_of, query=query
+        )
+
+    def can_access_memory_file(snapshot: dict[str, Any], user: dict[str, Any]) -> bool:
+        role = str(user.get("role") or "member")
+        scope = str(snapshot.get("scope") or "personal")
+        if scope == "personal":
+            return snapshot.get("user_id") == user["id"]
+        if scope == "org":
+            return role == "admin"
+        return role == "admin" or (
+            role == "manager" and snapshot.get("scope_id") == str(user.get("department") or "")
+        )
+
+    @app.get("/api/memories/{memory_id}/attachments")
+    def memory_attachments(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
+        snapshot = memory_store.snapshot(memory_id)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="记忆不存在")
+        if not can_access_memory_file(snapshot, user):
+            raise HTTPException(status_code=403, detail="没有访问权限")
+        items = memory_store.attachments(memory_id)
+        for item in items:
+            item.pop("path", None)
+            item["url"] = f"/api/memories/attachments/{item['id']}/file"
+        return {"attachments": items}
+
+    @app.post("/api/memories/{memory_id}/attachments")
+    async def upload_memory_attachment(
+        memory_id: str,
+        file: UploadFile = File(...),
+        caption: str = Form(default=""),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        snapshot = memory_store.snapshot(memory_id)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="记忆不存在")
+        if not can_access_memory_file(snapshot, user):
+            raise HTTPException(status_code=403, detail="没有写入权限")
+        mime = str(file.content_type or "application/octet-stream")
+        if not (mime.startswith(("image/", "audio/", "video/")) or mime == "application/pdf"):
+            raise HTTPException(status_code=400, detail="仅支持图片/音频/视频/PDF")
+        payload = await file.read(15 * 1024 * 1024 + 1)
+        if len(payload) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="附件超过 15MB")
+        if not payload:
+            raise HTTPException(status_code=400, detail="附件为空")
+        suffix = Path(file.filename or "").suffix.lower()[:12] or ".bin"
+        media_dir = settings.data_dir / "memory_media"
+        media_dir.mkdir(parents=True, exist_ok=True)
+        target = media_dir / f"{new_id('media')}{suffix}"
+        target.write_bytes(payload)
+        kind = "image" if mime.startswith("image/") else "audio" if mime.startswith("audio/") else "video" if mime.startswith("video/") else "document"
+        attachment = memory_store.add_attachment(
+            memory_id,
+            user_id=user["id"],
+            kind=kind,
+            filename=Path(file.filename or target.name).name[:200],
+            mime=mime,
+            path=str(target),
+            caption=caption,
+        )
+        attachment.pop("path", None)
+        attachment["url"] = f"/api/memories/attachments/{attachment['id']}/file"
+        return {"attachment": attachment}
+
+    @app.get("/api/memories/attachments/{attachment_id}/file")
+    def memory_attachment_file(attachment_id: str, user: dict[str, Any] = User):
+        attachment = memory_store.get_attachment(attachment_id)
+        if attachment is None:
+            raise HTTPException(status_code=404, detail="附件不存在")
+        snapshot = memory_store.snapshot(attachment["memory_id"])
+        if snapshot is None or not can_access_memory_file(snapshot, user):
+            raise HTTPException(status_code=403, detail="没有访问权限")
+        path = Path(attachment["path"])
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="附件文件已丢失")
+        return FileResponse(path, media_type=attachment.get("mime") or "application/octet-stream", filename=attachment["filename"])
 
     @app.get("/api/memories/pending")
     def pending_memories(user: dict[str, Any] = User) -> dict[str, Any]:

@@ -658,6 +658,149 @@ class UserMemoryService:
             expired += int(result.get("expired") or 0)
         return {"users": len(users), "merged": merged, "expired": expired}
 
+    def temporal_graph(
+        self,
+        user_id: str,
+        *,
+        user: dict[str, Any] | None = None,
+        agent_id: str = "",
+        as_of: str = "",
+        query: str = "",
+        limit: int = 200,
+    ) -> dict[str, Any]:
+        visible, params = self._visible_clause(user_id, user, agent_id=agent_id)
+        conn = self._conn()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM user_memories WHERE " + visible
+                + " ORDER BY created_at ASC LIMIT ?",
+                (*params, max(1, min(int(limit), 500))),
+            ).fetchall()
+        finally:
+            conn.close()
+        needle = (query or "").strip().lower()
+
+        def timestamp(value: str) -> datetime | None:
+            try:
+                parsed = datetime.fromisoformat(value)
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                return None
+
+        cutoff = timestamp(as_of) if as_of else None
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: list[dict[str, Any]] = []
+        for row in rows:
+            start = str(row["valid_from"] or row["created_at"] or "")
+            end = str(row["valid_to"] or "")
+            start_dt = timestamp(start)
+            end_dt = timestamp(end) if end else None
+            if cutoff is not None:
+                if start_dt is not None and start_dt > cutoff:
+                    continue
+                if end_dt is not None and end_dt <= cutoff:
+                    continue
+            subject = str(row["subject"] or "").strip()
+            predicate = str(row["predicate"] or "").strip()
+            object_text = str(row["object_text"] or "").strip()
+            if not subject and not predicate:
+                continue
+            if needle and needle not in (
+                subject + " " + predicate + " " + object_text + " " + row["content"]
+            ).lower():
+                continue
+            for name in (subject, object_text):
+                if name:
+                    nodes.setdefault(f"entity:{name}", {
+                        "id": f"entity:{name}", "name": name, "type": "entity",
+                    })
+            if subject and object_text:
+                nodes.setdefault(f"entity:{subject}", {
+                    "id": f"entity:{subject}", "name": subject, "type": "entity",
+                })
+                status = (
+                    "current" if not end and row["status"] == "active"
+                    else "pending" if row["status"] == "pending"
+                    else "rejected" if row["status"] == "rejected"
+                    else "historical"
+                )
+                edges.append({
+                    "id": row["id"],
+                    "subject": subject,
+                    "predicate": predicate or "相关",
+                    "object": object_text,
+                    "valid_from": start,
+                    "valid_to": end,
+                    "status": status,
+                    "scope": row["scope"],
+                    "agent_id": row["agent_id"],
+                    "confidence": row["confidence"],
+                    "authority": row["authority"],
+                })
+        counts: dict[str, int] = {}
+        for edge in edges:
+            counts[edge["status"]] = counts.get(edge["status"], 0) + 1
+        return {
+            "as_of": as_of,
+            "nodes": list(nodes.values()),
+            "edges": edges,
+            "counts": counts,
+        }
+
+    def add_attachment(
+        self,
+        memory_id: str,
+        *,
+        user_id: str,
+        kind: str,
+        filename: str,
+        mime: str,
+        path: str,
+        caption: str = "",
+    ) -> dict[str, Any]:
+        attachment_id = new_id("matt")
+        now = iso()
+        conn = self._conn()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO memory_attachments(id, memory_id, user_id, kind, filename,"
+                    " mime, path, caption, created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (attachment_id, memory_id, user_id, kind, filename, mime, path, caption[:500], now),
+                )
+        finally:
+            conn.close()
+        return {
+            "id": attachment_id,
+            "memory_id": memory_id,
+            "kind": kind,
+            "filename": filename,
+            "mime": mime,
+            "caption": caption[:500],
+            "created_at": now,
+        }
+
+    def get_attachment(self, attachment_id: str) -> dict[str, Any] | None:
+        conn = self._conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM memory_attachments WHERE id=?", (attachment_id,)
+            ).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def attachments(self, memory_id: str) -> list[dict[str, Any]]:
+        conn = self._conn()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM memory_attachments WHERE memory_id=? ORDER BY created_at DESC",
+                (memory_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
     def consolidate(self, user_id: str, *, expire_days: int = 0) -> dict[str, Any]:
         """Merge near-duplicate active memories and optionally expire stale low-value ones."""
         conn = self._conn()
