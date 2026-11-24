@@ -40,6 +40,7 @@ from .db import connect, init_db, is_integrity_error
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
 from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
+from .sandbox.apple_pool import AppleContainerPool
 from .container_workspaces import ContainerWorkspaceService, RuntimeReaper
 from .tools import ToolError, build_tool_registry
 from .user_memory import UserMemoryService
@@ -231,6 +232,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     registry = KnowledgeRegistry(settings)
     sandbox = build_sandbox_runner(settings)
     container_runtime = AppleContainerRuntime(settings)
+    container_pool = None
+    if settings.sandbox.startswith("apple") and settings.apple_pool_enabled:
+        container_pool = AppleContainerPool(settings, container_runtime)
     workspace_service = ContainerWorkspaceService(settings, container_runtime)
     active_runs = ActiveRuns()
     gate = ConcurrencyGate(
@@ -262,6 +266,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         LOG.info("星环 Chat ready at %s", settings.db_path)
         reaper_task = None
         reaper_stop = None
+        if container_pool is not None:
+            try:
+                container_pool.warm(settings.apple_pool_min)
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("Apple pool warm failed: %s", exc)
         if settings.sandbox.startswith("apple") and settings.runtime_idle_enabled:
             reaper_stop = asyncio.Event()
             reaper = RuntimeReaper(
@@ -290,6 +299,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 except (asyncio.CancelledError, Exception):
                     pass
             tools.close()
+            if container_pool is not None:
+                container_pool.close()
 
     app = FastAPI(
         title=APP_NAME,
@@ -303,6 +314,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.kb = registry.get(registry.infos[0].id)
     app.state.sandbox = sandbox
     app.state.container_runtime = container_runtime
+    app.state.container_pool = container_pool
     app.state.workspace_service = workspace_service
     app.state.active_runs = active_runs
     app.state.gate = gate
@@ -401,6 +413,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "plugins": plugin_host.summary(),
             "concurrency": gate.metrics().public(),
             "queue": {"enabled": job_queue is not None, "name": settings.queue_name},
+            "apple_pool": container_pool.status() if container_pool is not None else {"enabled": False},
             "kb": {
                 "provider": default_service.provider.kind,
                 "chat_model": getattr(
@@ -588,6 +601,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if job is None or job.user_id != user["id"]:
             raise HTTPException(status_code=404, detail="任务不存在")
         return {"job": job.public()}
+
+    @app.get("/api/containers/pool")
+    def container_pool_status(user: dict[str, Any] = User) -> dict[str, Any]:
+        if container_pool is None:
+            return {"enabled": False}
+        return container_pool.status()
 
     # ------------------------------------------------------------- runtimes
 

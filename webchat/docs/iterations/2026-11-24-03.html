@@ -1,0 +1,114 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-03</div>
+    <h1>Apple Container 预热池与并发配额</h1>
+    <p class="lede">
+      新增 AppleContainerPool：启动预热、idle 复用、owner 配额、max_total 上限、
+      container exec 和状态 API；空闲容器带只读根、cap-drop 和 tmpfs。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：61 项通过</span>
+      <span>架构：v15</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>本迭代完成</h2>
+    <div class="change-grid">
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Warm pool</h3>
+        <p>启动预热 APPLE_POOL_MIN；acquire 优先复用 idle。</p>
+        <code>AppleContainerPool</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Quota</h3>
+        <p>owner 配额 + max_total；超出抛 PoolExhausted。</p>
+        <code>APPLE_POOL_PER_USER</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Status / exec</h3>
+        <p>GET /api/containers/pool；lease exec 和清理。</p>
+        <code>container exec</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>真机验证</h2>
+    <pre class="record-pre">warm(1)
+→ idle=1 total=1
+
+acquire('smoke')
+→ active=1 owners={'smoke': 1}
+
+exec(lease, ['echo','pool-ok'])
+→ exit=0 stdout='pool-ok'
+
+close()
+→ pool containers deleted</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>当前预热池管理容器生命周期；一次性 Agent runner 仍使用 disposable container。</li>
+      <li>没有 idle TTL 自动缩容；池在进程退出时整体清理。</li>
+      <li>owner 配额以 RunRequest owner 为准，迁移 Agent 执行时才完全生效。</li>
+      <li>预热容器不是 per-user workspace；workspace 映射仍在独立表中。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-apple-pool.svg" alt="v15 Apple pool" />
+      <figcaption>v15：预热池、lease、owner 配额与状态 API。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">19 项完成，8 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>把一次性 Agent 执行迁移到 lease/exec，并在 release 时重置 workspace。</p>
+  </section>
+</article>

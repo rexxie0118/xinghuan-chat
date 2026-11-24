@@ -67,6 +67,10 @@ class Settings:
     apple_container_cpus: int = 2
     apple_container_memory: str = "2G"
     apple_container_network: str = "default"
+    apple_pool_enabled: bool = True
+    apple_pool_min: int = 1
+    apple_pool_max: int = 4
+    apple_pool_per_user: int = 2
     runtime_auto_ensure: bool = True
     runtime_idle_enabled: bool = True
     runtime_idle_stop_seconds: int = 1800
@@ -131,6 +135,10 @@ class Settings:
             apple_container_cpus=int(os.getenv("APPLE_CONTAINER_CPUS", "2")),
             apple_container_memory=(os.getenv("APPLE_CONTAINER_MEMORY") or "2G").strip(),
             apple_container_network=(os.getenv("APPLE_CONTAINER_NETWORK") or "default").strip(),
+            apple_pool_enabled=_env_bool("APPLE_POOL_ENABLED", True),
+            apple_pool_min=int(os.getenv("APPLE_POOL_MIN", "1")),
+            apple_pool_max=int(os.getenv("APPLE_POOL_MAX", "4")),
+            apple_pool_per_user=int(os.getenv("APPLE_POOL_PER_USER", "2")),
             runtime_auto_ensure=_env_bool("WEBCHAT_RUNTIME_AUTO_ENSURE", True),
             runtime_idle_enabled=_env_bool("WEBCHAT_RUNTIME_IDLE_ENABLED", True),
             runtime_idle_stop_seconds=int(os.getenv("WEBCHAT_RUNTIME_IDLE_STOP_SECONDS", "1800")),

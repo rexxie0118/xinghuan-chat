@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-03",
+      "title": "Apple Container 预热池与并发配额",
+      "date": "2026-11-24",
+      "summary": "新增 AppleContainerPool：启动预热、idle 复用、owner/max 配额、container exec 和状态 API。",
+      "record": "iterations/2026-11-24-03.html",
+      "diagrams": [
+        "architecture/2026-11-24-apple-pool.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-02",
       "title": "MCP 连接池与分片",
       "date": "2026-11-24",
@@ -258,6 +268,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-mcp-pool.svg",
       "note": "MCP shard pool + failover 已落地；无后台健康重建。"
+    },
+    {
+      "id": "2026-11-24-v15",
+      "label": "v15 · Apple Pool",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-apple-pool.svg",
+      "note": "预热池与配额已落地；一次性 Agent runner 迁移仍待做。"
     }
   ]
 }

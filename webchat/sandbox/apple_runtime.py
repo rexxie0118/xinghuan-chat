@@ -170,7 +170,14 @@ class AppleContainerRuntime:
             )
         return out
 
-    def ensure(self, key: str, *, image: str | None = None, command: list[str] | None = None) -> RuntimeInfo:
+    def ensure(
+        self,
+        key: str,
+        *,
+        image: str | None = None,
+        command: list[str] | None = None,
+        create_args: list[str] | None = None,
+    ) -> RuntimeInfo:
         name, volume = self.names_for(key)
         image = image or self.image
         command = command or ["sleep", "infinity"]
@@ -196,6 +203,8 @@ class AppleContainerRuntime:
                 "--memory",
                 self.memory,
             ]
+            if create_args:
+                args += [str(item) for item in create_args]
             if self.network and self.network.lower() != "default":
                 args += ["--network", self.network]
             if self.network.lower() == "none":
