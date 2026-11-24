@@ -542,8 +542,8 @@ POST   /api/kb/reindex?kb=product
 限制：
 
 - 单文件 10MB；
-- PDF 需要 `pypdf`；
-- DOCX 需要 `python-docx`；
+- PDF 依赖 `pypdf`（已列入 requirements）；
+- DOCX 依赖 `python-docx`（已列入 requirements）；
 - 扫描 PDF 不支持 OCR；
 - 上传目录必须是 `webchat/knowledge/<kb-id>/`。
 
