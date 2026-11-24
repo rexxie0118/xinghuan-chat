@@ -5,7 +5,10 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
       "enabled": false,
+      "trusted": true,
       "allow_tools": ["read_file", "list_directory", "search_files"],
+      "deny_tools": [],
+      "env_allowlist": ["HOME"],
       "timeout": 10
     },
     "remote": {
@@ -15,7 +18,11 @@
         "Authorization": "Bearer ${MCP_TOKEN}"
       },
       "enabled": false,
+      "trusted": true,
+      "allow_hosts": ["example.com"],
       "allow_tools": ["*"],
+      "deny_tools": [],
+      "env_allowlist": ["MCP_TOKEN"],
       "timeout": 10
     }
   }

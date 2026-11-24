@@ -622,6 +622,26 @@ HTTP server：
 
 registry、调用层和 LLM Tool Loop 已经打通；有工具时 Agent 模式会自动选择并调用。
 
+MCP 安全字段：
+
+```json
+{
+  "trusted": true,
+  "allow_tools": ["read_file"],
+  "deny_tools": ["write_file"],
+  "allow_dangerous": false,
+  "allow_hosts": ["example.com"],
+  "env_allowlist": ["MCP_TOKEN"]
+}
+```
+
+- `trusted=false` 的 server 不加载；
+- `allow_tools` 白名单，`deny_tools` 优先排除；
+- `dangerous=true` 的 server 默认拒绝 dangerous 工具，必须显式 `allow_dangerous=true`；
+- HTTP server 的 host 必须在 `allow_hosts`；
+- `${ENV}` 只允许 `env_allowlist` 中的变量展开；
+- 危险工具与权限边界在 `ToolRegistry.call` 强制检查。
+
 MCP 分片/连接池：
 
 ```json
@@ -1242,7 +1262,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 72 项测试，全部通过。
+> 当前共 75 项测试，全部通过。
 
 ---
 

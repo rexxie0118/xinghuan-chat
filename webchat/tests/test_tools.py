@@ -8,7 +8,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from webchat.tools import ToolError, ToolRegistry
+from webchat.tools import ToolError, ToolRegistry, _expand
 
 
 class ToolRegistryTest(unittest.TestCase):
@@ -111,6 +111,51 @@ class ToolRegistryTest(unittest.TestCase):
             registry.close()
             server.shutdown()
             server.server_close()
+
+    def test_env_allowlist_blocks_undeclared_variables(self):
+        import os
+        os.environ["MCP_SECRET_TEST"] = "secret"
+        self.assertEqual(_expand("${MCP_SECRET_TEST}", {"MCP_SECRET_TEST"}), "secret")
+        self.assertEqual(_expand("${MCP_SECRET_TEST}", {"OTHER"}), "")
+
+    def test_untrusted_server_is_rejected(self):
+        registry = ToolRegistry(
+            {
+                "servers": {
+                    "untrusted": {
+                        "enabled": True,
+                        "trusted": False,
+                        "transport": "stdio",
+                        "command": sys.executable,
+                        "args": [str(self.fake)],
+                    }
+                }
+            }
+        ).discover()
+        try:
+            self.assertEqual(registry.list_tools(), [])
+            self.assertIn("trusted", registry.summary()["servers"][0]["error"])
+        finally:
+            registry.close()
+
+    def test_dangerous_tool_requires_allow_dangerous(self):
+        config = {
+            "servers": {
+                "armed": {
+                    "transport": "stdio",
+                    "command": sys.executable,
+                    "args": [str(self.fake)],
+                    "allow_tools": ["echo"],
+                    "dangerous": True,
+                }
+            }
+        }
+        registry = ToolRegistry(config).discover()
+        try:
+            with self.assertRaises(ToolError):
+                registry.call("armed.echo", {"text": "x"})
+        finally:
+            registry.close()
 
     def test_plugin_sources_are_normalized(self):
         registry = ToolRegistry({})

@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-12",
+      "title": "MCP 权限与安全",
+      "date": "2026-11-24",
+      "summary": "MCP 增加 trusted/deny_tools/allow_dangerous/allow_hosts/env_allowlist；危险工具默认关闭。",
+      "record": "iterations/2026-11-24-12.html",
+      "diagrams": [
+        "architecture/2026-11-24-mcp-security.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-11",
       "title": "插件权限与信任模型",
       "date": "2026-11-24",
@@ -404,6 +414,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-plugin-trust.svg",
       "note": "插件信任与权限边界已落地；in-process 仍不是 OS 沙箱。"
+    },
+    {
+      "id": "2026-11-24-v23",
+      "label": "v23 · MCP Security",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-mcp-security.svg",
+      "note": "MCP 配置边界已落地；无交互式审批队列。"
     }
   ]
 }

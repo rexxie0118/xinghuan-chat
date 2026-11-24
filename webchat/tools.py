@@ -40,13 +40,19 @@ class ToolError(RuntimeError):
     """A tool was unavailable, denied, timed out, or returned an error."""
 
 
-def _expand(value: Any) -> Any:
+def _expand(value: Any, allowed_env: set[str] | None = None) -> Any:
     if isinstance(value, str):
-        return _ENV_RE.sub(lambda m: os.getenv(m.group(1), ""), value)
+        def replace(match: re.Match[str]) -> str:
+            name = match.group(1)
+            if allowed_env is not None and name not in allowed_env:
+                return ""
+            return os.getenv(name, "")
+
+        return _ENV_RE.sub(replace, value)
     if isinstance(value, list):
-        return [_expand(v) for v in value]
+        return [_expand(v, allowed_env) for v in value]
     if isinstance(value, dict):
-        return {k: _expand(v) for k, v in value.items()}
+        return {k: _expand(v, allowed_env) for k, v in value.items()}
     return value
 
 
@@ -133,7 +139,8 @@ class MCPClient:
 class StdioMCPClient(MCPClient):
     def __init__(self, server: str, config: dict[str, Any]) -> None:
         self.name = server
-        self.config = _expand(config)
+        self.env_allowlist = {str(x) for x in (config.get("env_allowlist") or [])} or None
+        self.config = _expand(config, self.env_allowlist)
         self.timeout = float(self.config.get("timeout") or 10)
         self._proc: subprocess.Popen[str] | None = None
         self._queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
@@ -306,7 +313,8 @@ class StdioMCPClient(MCPClient):
 class HttpMCPClient(MCPClient):
     def __init__(self, server: str, config: dict[str, Any]) -> None:
         self.name = server
-        self.config = _expand(config)
+        self.env_allowlist = {str(x) for x in (config.get("env_allowlist") or [])} or None
+        self.config = _expand(config, self.env_allowlist)
         self.timeout = float(self.config.get("timeout") or 10)
         url = str(self.config.get("url") or "").strip()
         parsed = urlparse(url)
@@ -561,13 +569,20 @@ class ToolRegistry:
                 status: dict[str, Any] = {
                     "name": server_name,
                     "enabled": bool(raw_config.get("enabled", True)),
+                    "trusted": bool(raw_config.get("trusted", True)),
                     "connected": False,
                     "error": "",
                     "tools": 0,
                     "transport": str(raw_config.get("transport") or "stdio"),
+                    "allow_dangerous": bool(raw_config.get("allow_dangerous", False)),
+                    "allow_hosts": list(raw_config.get("allow_hosts") or []),
+                    "deny_tools": list(raw_config.get("deny_tools") or []),
                 }
                 self._status[server_name] = status
                 if not status["enabled"]:
+                    continue
+                if not status["trusted"]:
+                    status["error"] = "server 未标记 trusted=true"
                     continue
                 clients: list[MCPClient] = []
                 try:
@@ -608,11 +623,14 @@ class ToolRegistry:
                     if isinstance(raw_allowed, str):
                         raw_allowed = [raw_allowed]
                     allowed = {str(x) for x in raw_allowed}
+                    denied = {str(x) for x in (raw_config.get("deny_tools") or [])}
                     for tool in tools:
                         raw_name = str(tool.get("name") or "")
                         if not raw_name:
                             continue
                         if "*" not in allowed and raw_name not in allowed:
+                            continue
+                        if raw_name in denied:
                             continue
                         name = f"{server_name}.{raw_name}"
                         self._specs[name] = ToolSpec(
@@ -676,6 +694,13 @@ class ToolRegistry:
         spec = self._specs.get(name)
         if spec is None:
             raise ToolError(f"工具不存在或未授权：{name}")
+        server_config = self.servers.get(spec.server) or {}
+        if (
+            spec.server != "plugin"
+            and spec.dangerous
+            and not bool(server_config.get("allow_dangerous", False))
+        ):
+            raise ToolError(f"危险工具未允许：{name}；需要 allow_dangerous=true")
         if arguments is None:
             arguments = {}
         if not isinstance(arguments, dict):
