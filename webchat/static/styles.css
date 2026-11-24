@@ -1988,3 +1988,13 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
   .memory-form select[aria-label="记忆范围"] { grid-column: auto; }
   .memory-form input { grid-column: 1 / -1; }
 }
+
+/* ------------------------------------------------------- memory approval */
+.memory-status { color: #f4c47a; font-size: 8.5px; }
+.memory-approve, .memory-reject {
+  height: 20px; padding: 0 5px; border-radius: 4px; font-size: 8.5px;
+  border: 1px solid var(--line);
+}
+.memory-approve { color: #7fe0b0; }
+.memory-reject { color: #f4a3a3; }
+.memory-approve:hover, .memory-reject:hover { border-color: var(--line-strong); }

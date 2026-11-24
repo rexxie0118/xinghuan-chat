@@ -331,11 +331,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     finally:
         conn.close()
 
+    async def memory_consolidation_loop(stop: asyncio.Event) -> None:
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=max(60, settings.memory_consolidate_interval))
+            except asyncio.TimeoutError:
+                pass
+            if stop.is_set():
+                break
+            try:
+                result = await asyncio.to_thread(
+                    memory_store.consolidate_all,
+                    expire_days=settings.memory_consolidate_expire_days,
+                )
+                audit.record(
+                    event_type="memory_consolidate_job",
+                    component="memory",
+                    action="scheduled",
+                    status="ok",
+                    metadata=result,
+                )
+                LOG.info("memory consolidation job: %s", result)
+            except Exception as exc:  # noqa: BLE001
+                LOG.warning("memory consolidation job failed: %s", exc)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         LOG.info("星环 Chat ready at %s", settings.db_path)
         reaper_task = None
         reaper_stop = None
+        memory_stop = asyncio.Event()
+        memory_task = asyncio.create_task(memory_consolidation_loop(memory_stop))
         if container_pool is not None:
             try:
                 container_pool.warm(settings.apple_pool_min)
@@ -362,6 +388,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             if reaper_stop is not None:
                 reaper_stop.set()
+            memory_stop.set()
+            if memory_task is not None:
+                memory_task.cancel()
+                try:
+                    await memory_task
+                except (asyncio.CancelledError, Exception):
+                    pass
             if reaper_task is not None:
                 reaper_task.cancel()
                 try:
@@ -637,7 +670,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 component="memory",
                 action=payload.scope,
                 status="ok",
-                metadata={"result": result.get("status"), "memory_id": result.get("id", "")},
+                metadata={
+                    "op": "create" if result.get("status") in {"created", "superseded"} else "noop",
+                    "result": result.get("status"),
+                    "memory_id": result.get("id", ""),
+                    "snapshot": result.get("snapshot"),
+                    "superseded_snapshots": result.get("superseded_snapshots") or [],
+                },
                 user_id=user["id"],
             )
         except ValueError as exc:
@@ -660,16 +699,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "stats": memory_store.stats(user["id"], user=user),
         }
 
+    @app.get("/api/memories/pending")
+    def pending_memories(user: dict[str, Any] = User) -> dict[str, Any]:
+        return {"memories": memory_store.pending(user=user), "can_approve": user.get("role") in {"admin", "manager"}}
+
+    @app.post("/api/memories/{memory_id}/approve")
+    def approve_memory(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
+        result = memory_store.approve(memory_id, approver=user["id"], user=user)
+        if result is None:
+            raise HTTPException(status_code=403, detail="没有审批权限或状态不允许")
+        audit.record(
+            event_type="memory_approve",
+            component="memory",
+            action="approve",
+            status="ok",
+            metadata={"op": "approve", "previous_status": "pending", "snapshot": result},
+            user_id=user["id"],
+        )
+        return {"memory": result, "stats": memory_store.stats(user["id"], user=user)}
+
+    @app.post("/api/memories/{memory_id}/reject")
+    def reject_memory(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
+        result = memory_store.reject(memory_id, approver=user["id"], user=user)
+        if result is None:
+            raise HTTPException(status_code=403, detail="没有审批权限或状态不允许")
+        audit.record(
+            event_type="memory_reject",
+            component="memory",
+            action="reject",
+            status="ok",
+            metadata={"op": "reject", "previous_status": "pending", "snapshot": result},
+            user_id=user["id"],
+        )
+        return {"memory": result, "stats": memory_store.stats(user["id"], user=user)}
+
     @app.delete("/api/memories/{memory_id}")
     def delete_memory(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
-        if not memory_store.forget(user["id"], memory_id, user=user):
+        snapshot = memory_store.snapshot(memory_id)
+        if snapshot is None or not memory_store.forget(user["id"], memory_id, user=user):
             raise HTTPException(status_code=404, detail="记忆不存在")
         audit.record(
             event_type="memory_delete",
             component="memory",
             action="forget",
             status="ok",
-            metadata={"memory_id": memory_id},
+            metadata={"op": "delete", "memory_id": memory_id, "snapshot": snapshot},
             user_id=user["id"],
         )
         return {"ok": True}
@@ -828,6 +902,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 user_id=user["id"], limit=limit, event_type=event_type
             )
         }
+
+    @app.post("/api/audit/{event_id}/undo")
+    def undo_audit_event(event_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
+        event = audit.get(event_id, user_id=user["id"])
+        if event is None:
+            raise HTTPException(status_code=404, detail="审计事件不存在")
+        if event.get("component") != "memory":
+            raise HTTPException(status_code=400, detail="该审计事件不可撤销")
+        result = memory_store.undo_event(event.get("metadata") or {})
+        if result is None:
+            raise HTTPException(status_code=400, detail="该事件没有可回滚快照")
+        audit.record(
+            event_type="memory_rollback",
+            component="memory",
+            action="undo",
+            status="ok",
+            metadata={"source_event": event_id, **result},
+            user_id=user["id"],
+        )
+        return {"ok": True, "result": result, "stats": memory_store.stats(user["id"], user=user)}
 
     @app.get("/api/metrics")
     def metrics(user: dict[str, Any] = User) -> dict[str, Any]:
@@ -1467,8 +1561,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             action="auto",
                             status="ok" if item.get("status") != "skipped" else "skipped",
                             metadata={
+                                "op": "create" if item.get("status") in {"created", "superseded"} else "noop",
                                 "result": item.get("status", ""),
                                 "memory_id": item.get("id", ""),
+                                "snapshot": item.get("snapshot"),
+                                "superseded_snapshots": item.get("superseded_snapshots") or [],
                             },
                             user_id=user["id"],
                             conversation_id=conversation_id,

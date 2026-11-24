@@ -142,6 +142,29 @@ class AuditLog:
         finally:
             conn.close()
 
+    def get(self, event_id: str, *, user_id: str | None = None) -> dict[str, Any] | None:
+        conn = self._conn()
+        try:
+            if user_id:
+                row = conn.execute(
+                    "SELECT * FROM audit_events WHERE id=? AND user_id=?",
+                    (event_id, user_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM audit_events WHERE id=?", (event_id,)
+                ).fetchone()
+            if row is None:
+                return None
+            item = dict(row)
+            try:
+                item["metadata"] = json.loads(item.pop("metadata_json") or "{}")
+            except ValueError:
+                item["metadata"] = {}
+            return item
+        finally:
+            conn.close()
+
     def metrics(self, *, user_id: str | None = None) -> dict[str, Any]:
         rows = self.query(user_id=user_id, limit=500)
         total = len(rows)

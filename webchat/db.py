@@ -340,6 +340,8 @@ def init_db(path: Path | str) -> None:
                     "evidence_snippet": "TEXT NOT NULL DEFAULT ''",
                     "created_by": "TEXT NOT NULL DEFAULT ''",
                     "status": "TEXT NOT NULL DEFAULT 'active'",
+                    "approved_by": "TEXT NOT NULL DEFAULT ''",
+                    "approved_at": "TEXT NOT NULL DEFAULT ''",
                 },
             )
             _ensure_columns(

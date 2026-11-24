@@ -149,9 +149,40 @@ class ApiTest(unittest.TestCase):
             self.assertFalse(
                 any(m["id"] == memory["id"] for m in client.get("/api/memories").json()["memories"])
             )
+            events = client.get("/api/audit?event_type=memory_delete&limit=1").json()["events"]
+            self.assertTrue(events)
+            undone = client.post(f"/api/audit/{events[0]['id']}/undo")
+            self.assertEqual(undone.status_code, 200, undone.text)
+            self.assertTrue(
+                any(m["id"] == memory["id"] for m in client.get("/api/memories").json()["memories"])
+            )
+            client.delete(f"/api/memories/{memory['id']}")
             consolidated = client.post("/api/memories/consolidate")
             self.assertEqual(consolidated.status_code, 200)
             self.assertIn("stats", consolidated.json())
+
+    def test_shared_memory_approval_api(self):
+        with TestClient(self.app) as client:
+            self.login(client, "admin", "admin1234")
+            created = client.post(
+                "/api/memories",
+                json={"kind": "fact", "content": "API 审批测试", "scope": "org"},
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            memory = created.json()["memory"]
+            self.assertEqual(memory["snapshot"]["status"], "pending")
+            approved = client.post(f"/api/memories/{memory['id']}/approve")
+            self.assertEqual(approved.status_code, 200, approved.text)
+            self.assertEqual(approved.json()["memory"]["status"], "active")
+            client.delete(f"/api/memories/{memory['id']}")
+            demo = TestClient(self.app)
+            with demo:
+                self.login(demo)
+                denied = demo.post(
+                    "/api/memories",
+                    json={"kind": "fact", "content": "不能写全公司", "scope": "org"},
+                )
+                self.assertEqual(denied.status_code, 403)
 
     def test_cancel_endpoint_without_active_run(self):
         with TestClient(self.app) as client:

@@ -115,6 +115,9 @@ class UserMemoryTest(unittest.TestCase):
             self.user["id"], kind="fact", content="全公司共享规范",
             scope="org", scope_id="org",
         )
+        admin_user = repo.user_public(admin)
+        self.service.approve(product["id"], approver=admin["id"], user=admin_user)
+        self.service.approve(org["id"], approver=admin["id"], user=admin_user)
         other_recall = self.service.recall(
             other["id"], "共享", user=repo.user_public(other)
         )
@@ -142,6 +145,69 @@ class UserMemoryTest(unittest.TestCase):
         self.assertEqual(row["source_uri"], "conversation:conv-1")
         self.assertEqual(row["evidence_snippet"], "用户原话：来源可追溯")
         self.assertEqual(row["created_by"], self.user["id"])
+
+    def test_shared_memory_requires_approval(self):
+        conn = connect(self.db)
+        try:
+            manager = repo.create_user(
+                conn, username="manager", display_name="Manager", password_hash="x",
+                department="产品部", role="manager",
+            )
+        finally:
+            conn.close()
+        pending = self.service.remember(
+            self.user["id"], kind="fact", content="产品部待审批经验",
+            scope="department", scope_id="产品部",
+        )
+        self.assertEqual(pending["status"], "created")
+        self.assertEqual(pending["snapshot"]["status"], "pending")
+        self.assertEqual(self.service.recall(
+            self.user["id"], "待审批", user=repo.user_public(self.user)
+        ), [])
+        approved = self.service.approve(
+            pending["id"], approver=manager["id"], user=repo.user_public(manager)
+        )
+        self.assertEqual(approved["status"], "active")
+        self.assertEqual(approved["approved_by"], manager["id"])
+        self.assertTrue(self.service.recall(
+            self.user["id"], "待审批", user=repo.user_public(self.user)
+        ))
+
+    def test_reject_shared_memory(self):
+        conn = connect(self.db)
+        try:
+            manager = repo.create_user(
+                conn, username="manager2", display_name="Manager", password_hash="x",
+                department="产品部", role="manager",
+            )
+        finally:
+            conn.close()
+        pending = self.service.remember(
+            self.user["id"], kind="fact", content="要拒绝的共享经验",
+            scope="department", scope_id="产品部",
+        )
+        rejected = self.service.reject(
+            pending["id"], approver=manager["id"], user=repo.user_public(manager)
+        )
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(self.service.pending(user=repo.user_public(manager)), [])
+
+    def test_undo_deleted_memory(self):
+        created = self.service.remember(
+            self.user["id"], kind="fact", content="可撤销删除的记忆"
+        )
+        snapshot = created["snapshot"]
+        self.assertTrue(self.service.forget(self.user["id"], created["id"]))
+        self.assertEqual(self.service.list(self.user["id"]), [])
+        restored = self.service.undo_event({"op": "delete", "snapshot": snapshot})
+        self.assertEqual(restored["action"], "restore")
+        self.assertTrue(any(item["id"] == created["id"] for item in self.service.list(self.user["id"])))
+
+    def test_consolidate_all_runs_for_users(self):
+        self.service.remember(self.user["id"], kind="fact", content="后台整理测试")
+        result = self.service.consolidate_all(expire_days=0)
+        self.assertGreaterEqual(result["users"], 1)
+        self.assertIn("merged", result)
 
     def test_slot_supersede_and_forget(self):
         self.service.remember(

@@ -1154,7 +1154,8 @@ user_memories(
 
 类型：`fact` / `preference` / `task`。  
 范围：`personal` / `department` / `org`。  
-状态：`active` / `pending` / `archived`（当前写入默认 active）。
+状态：`active` / `pending` / `rejected` / `archived`。  
+共享范围写入默认 `pending`，需要 admin/本部门 manager 审批；个人记忆直接 active。
 
 自动提取（只匹配明确表达，避免把每句话都写成记忆）：
 
@@ -1198,6 +1199,10 @@ POST   /api/memories        {kind, content, subject?, predicate?, importance?}
 DELETE /api/memories/{id}
 POST   /api/memories/consolidate?expire_days=180
 POST   /api/memories        {scope, scope_id}
+GET    /api/memories/pending
+POST   /api/memories/{id}/approve
+POST   /api/memories/{id}/reject
+POST   /api/audit/{event_id}/undo
 ```
 
 Topbar「记忆」打开管理弹窗：
@@ -1206,6 +1211,7 @@ Topbar「记忆」打开管理弹窗：
 - 显示来源会话、创建日期、命中次数；
 - 支持手动添加、硬删除；
 - 支持选择个人 / 部门 / 全公司范围；
+- 共享记忆显示「待审批」，审批人可通过/拒绝；
 - 支持「整理」：合并近重复、归档低价值过期记忆；
 - 显示有效/归档数量与平均置信度。
 
@@ -1225,7 +1231,9 @@ department  admin / 本部门 manager
 org         admin
 ```
 
-删除是硬删除；冲突槽位通过 `valid_from` / `valid_to` / `superseded_by` 保留版本审计。
+共享记忆审批后写入 `approved_by` / `approved_at`。  
+删除是硬删除；审计事件保存删除前 snapshot，可通过 `/api/audit/{event_id}/undo` 恢复。  
+后台任务按 `WEBCHAT_MEMORY_CONSOLIDATE_INTERVAL` 定期整理个人记忆（默认 86400 秒）。
 
 ### Token 级上下文预算
 
@@ -1528,7 +1536,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 96 项测试，全部通过。
+> 当前共 101 项测试，全部通过。
 
 ---
 

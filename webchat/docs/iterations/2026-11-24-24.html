@@ -1,0 +1,115 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-24</div>
+    <h1>共享记忆审批、审计回滚与后台整理</h1>
+    <p class="lede">
+      共享范围写入进入 pending；admin/本部门 manager 可 approve/reject；
+      删除保存 snapshot 并通过 audit undo 恢复；后台按日整理个人记忆。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：101 项通过</span>
+      <span>架构：v35</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>审批</h2>
+    <pre class="record-pre">department/org write
+→ status=pending
+→ GET /api/memories/pending
+→ POST /{id}/approve  (admin / dept manager)
+→ POST /{id}/reject
+→ active / rejected</pre>
+  </section>
+
+  <section>
+    <h2>回滚</h2>
+    <pre class="record-pre">memory_delete
+→ audit metadata.snapshot
+→ POST /api/audit/{event_id}/undo
+→ restore row
+
+memory_write (created/superseded)
+→ undo deletes new row
+→ restore superseded snapshots</pre>
+  </section>
+
+  <section>
+    <h2>后台整理</h2>
+    <pre class="record-pre">asyncio task
+→ every WEBCHAT_MEMORY_CONSOLIDATE_INTERVAL (86400s)
+→ consolidate_all(expire_days=180)
+→ memory_consolidate_job audit
+
+当前只处理 personal scope</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>pending 记忆在审批前只应作为待审数据，当前列表会显示；</li>
+      <li>rejected 行保留审计，不做硬删除；</li>
+      <li>后台整理不处理 department/org；</li>
+      <li>无 dry-run / 导出确认 UI；</li>
+      <li>回滚只支持 memory 事件，不支持通用审计回滚。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-memory-approval.svg" alt="v35 memory approval" />
+      <figcaption>v35：pending approval → active/rejected；snapshot undo；定时 consolidation。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">39 项完成，0 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>声明式联网连接器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>连接器管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Chat 模式联网开关</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Web Research 工具链</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部来源引用</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>评测集与失败注入</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>部门 RBAC + 默认 Agent/KB</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>用户权限管理界面</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>知识库文档管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>PPTX / Excel 解析与入库</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>记忆质量：写入门槛 / 合并 / 预算 / 整理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 scope / provenance / audit</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>共享记忆审批 / 审计回滚 / 后台整理</td><td><span class="status done">完成</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

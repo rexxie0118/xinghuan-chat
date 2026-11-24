@@ -21,7 +21,7 @@ from .util import iso, new_id
 
 VALID_KINDS = {"fact", "preference", "task"}
 VALID_SCOPES = {"personal", "department", "org"}
-VALID_STATUSES = {"active", "pending", "archived"}
+VALID_STATUSES = {"active", "pending", "rejected", "archived"}
 MAX_CONTENT_CHARS = 300
 MIN_AUTO_CONFIDENCE = 0.6
 NEAR_DUPLICATE = 0.90
@@ -132,6 +132,8 @@ class UserMemoryService:
             raise ValueError(f"未知记忆范围：{scope}")
         if status not in VALID_STATUSES:
             raise ValueError(f"未知记忆状态：{status}")
+        if scope != "personal" and status == "active":
+            status = "pending"
         if scope == "personal":
             scope_id = user_id
         elif not scope_id:
@@ -158,13 +160,13 @@ class UserMemoryService:
                 if scope == "personal":
                     active = conn.execute(
                         "SELECT * FROM user_memories WHERE user_id=? AND scope='personal'"
-                        " AND valid_to IS NULL AND status='active'",
+                        " AND valid_to IS NULL AND status IN ('active','pending')",
                         (user_id,),
                     ).fetchall()
                 else:
                     active = conn.execute(
                         "SELECT * FROM user_memories WHERE scope=? AND scope_id=?"
-                        " AND valid_to IS NULL AND status='active'",
+                        " AND valid_to IS NULL AND status IN ('active','pending')",
                         (scope, scope_id),
                     ).fetchall()
 
@@ -184,14 +186,16 @@ class UserMemoryService:
                         " WHERE id=?",
                         (now, now, float(importance), float(confidence), row["id"]),
                     )
-                    return {"status": "duplicate", "id": row["id"]}
+                    return {"status": "duplicate", "id": row["id"], "snapshot": dict(row)}
 
                 memory_id = new_id("umem")
                 superseded: list[str] = []
+                superseded_snapshots: list[dict[str, Any]] = []
                 if subject and predicate:
                     for row in active:
                         if row["subject"] != subject or row["predicate"] != predicate:
                             continue
+                        superseded_snapshots.append(dict(row))
                         conn.execute(
                             "UPDATE user_memories SET valid_to=?, superseded_by=?, updated_at=?"
                             " WHERE id=?",
@@ -206,8 +210,8 @@ class UserMemoryService:
                         source_conversation_id, source_message_id, created_at,
                         updated_at, last_used_at, valid_from, scope, scope_id,
                         source_uri, evidence_snippet, created_by, status,
-                        valid_to, superseded_by)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        approved_by, approved_at, valid_to, superseded_by)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         memory_id,
@@ -232,13 +236,22 @@ class UserMemoryService:
                         evidence_snippet[:MAX_CONTENT_CHARS],
                         user_id,
                         status,
+                        "",
+                        "",
                         None,
                         "",
                     ),
                 )
         finally:
             conn.close()
-        return {"status": "superseded" if superseded else "created", "id": memory_id, "superseded": superseded}
+        snapshot = self.snapshot(memory_id)
+        return {
+            "status": "superseded" if superseded else "created",
+            "id": memory_id,
+            "superseded": superseded,
+            "superseded_snapshots": superseded_snapshots,
+            "snapshot": snapshot,
+        }
 
     def extract_and_remember(
         self,
@@ -355,6 +368,174 @@ class UserMemoryService:
         finally:
             conn.close()
 
+    def snapshot(self, memory_id: str) -> dict[str, Any] | None:
+        conn = self._conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM user_memories WHERE id=?", (memory_id,)
+            ).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def _restore_snapshot(self, snapshot: dict[str, Any]) -> None:
+        columns = [
+            "id", "user_id", "kind", "content", "subject", "predicate",
+            "object_text", "importance", "confidence", "hits",
+            "source_conversation_id", "source_message_id", "created_at",
+            "updated_at", "last_used_at", "valid_from", "scope", "scope_id",
+            "source_uri", "evidence_snippet", "created_by", "status",
+            "approved_by", "approved_at", "valid_to", "superseded_by",
+        ]
+        values = [snapshot.get(column) for column in columns]
+        conn = self._conn()
+        try:
+            with conn:
+                conn.execute("DELETE FROM user_memories WHERE id=?", (snapshot.get("id"),))
+                placeholders = ",".join("?" for _ in columns)
+                conn.execute(
+                    f"INSERT INTO user_memories({','.join(columns)}) VALUES({placeholders})",
+                    tuple(values),
+                )
+        finally:
+            conn.close()
+
+    def approve(
+        self, memory_id: str, *, approver: str, user: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        conn = self._conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM user_memories WHERE id=?", (memory_id,)
+            ).fetchone()
+            if row is None or row["status"] != "pending":
+                return None
+            scope = str(row["scope"] or "personal")
+            role = str(user.get("role") or "member")
+            allowed = role == "admin" or (
+                role == "manager"
+                and scope == "department"
+                and row["scope_id"] == str(user.get("department") or "")
+            )
+            if not allowed:
+                return None
+            now = iso()
+            with conn:
+                conn.execute(
+                    "UPDATE user_memories SET status='active', approved_by=?,"
+                    " approved_at=?, updated_at=? WHERE id=?",
+                    (approver, now, now, memory_id),
+                )
+            return self.snapshot(memory_id)
+        finally:
+            conn.close()
+
+    def reject(
+        self, memory_id: str, *, approver: str, user: dict[str, Any], note: str = ""
+    ) -> dict[str, Any] | None:
+        conn = self._conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM user_memories WHERE id=?", (memory_id,)
+            ).fetchone()
+            if row is None or row["status"] != "pending":
+                return None
+            scope = str(row["scope"] or "personal")
+            role = str(user.get("role") or "member")
+            allowed = role == "admin" or (
+                role == "manager"
+                and scope == "department"
+                and row["scope_id"] == str(user.get("department") or "")
+            )
+            if not allowed:
+                return None
+            now = iso()
+            with conn:
+                conn.execute(
+                    "UPDATE user_memories SET status='rejected', approved_by=?,"
+                    " approved_at=?, updated_at=? WHERE id=?",
+                    (approver, now, now, memory_id),
+                )
+            return self.snapshot(memory_id)
+        finally:
+            conn.close()
+
+    def pending(self, *, user: dict[str, Any]) -> list[dict[str, Any]]:
+        conn = self._conn()
+        try:
+            role = str(user.get("role") or "member")
+            if role == "admin":
+                rows = conn.execute(
+                    "SELECT * FROM user_memories WHERE status='pending'"
+                    " AND valid_to IS NULL ORDER BY created_at DESC"
+                ).fetchall()
+            elif role == "manager":
+                rows = conn.execute(
+                    "SELECT * FROM user_memories WHERE status='pending'"
+                    " AND valid_to IS NULL AND scope='department' AND scope_id=?"
+                    " ORDER BY created_at DESC",
+                    (str(user.get("department") or ""),),
+                ).fetchall()
+            else:
+                return []
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    def undo_event(self, metadata: dict[str, Any]) -> dict[str, Any] | None:
+        """Undo a memory audit event using its stored snapshots."""
+        snapshot = metadata.get("snapshot")
+        if not isinstance(snapshot, dict) or not snapshot.get("id"):
+            return None
+        action = str(metadata.get("op") or "")
+        if action == "delete":
+            self._restore_snapshot(snapshot)
+            return {"action": "restore", "memory_id": snapshot["id"]}
+        if action == "create":
+            conn = self._conn()
+            try:
+                with conn:
+                    conn.execute("DELETE FROM user_memories WHERE id=?", (snapshot["id"],))
+            finally:
+                conn.close()
+            for old in metadata.get("superseded_snapshots") or []:
+                if isinstance(old, dict) and old.get("id"):
+                    self._restore_snapshot(old)
+            return {"action": "delete", "memory_id": snapshot["id"]}
+        if action in {"approve", "reject"} and metadata.get("previous_status"):
+            conn = self._conn()
+            try:
+                with conn:
+                    conn.execute(
+                        "UPDATE user_memories SET status=?, approved_by='', approved_at='',"
+                        " updated_at=? WHERE id=?",
+                        (metadata["previous_status"], iso(), snapshot["id"]),
+                    )
+            finally:
+                conn.close()
+            return {"action": "status", "memory_id": snapshot["id"], "status": metadata["previous_status"]}
+        return None
+
+    def consolidate_all(self, *, expire_days: int = 180) -> dict[str, Any]:
+        conn = self._conn()
+        try:
+            users = [
+                row["user_id"]
+                for row in conn.execute(
+                    "SELECT DISTINCT user_id FROM user_memories WHERE valid_to IS NULL"
+                    " AND scope='personal'"
+                ).fetchall()
+            ]
+        finally:
+            conn.close()
+        merged = 0
+        expired = 0
+        for user_id in users:
+            result = self.consolidate(user_id, expire_days=expire_days)
+            merged += int(result.get("merged") or 0)
+            expired += int(result.get("expired") or 0)
+        return {"users": len(users), "merged": merged, "expired": expired}
+
     def consolidate(self, user_id: str, *, expire_days: int = 0) -> dict[str, Any]:
         """Merge near-duplicate active memories and optionally expire stale low-value ones."""
         conn = self._conn()
@@ -429,6 +610,11 @@ class UserMemoryService:
                 "SELECT COUNT(*) AS c FROM user_memories WHERE " + visible,
                 tuple(params),
             ).fetchone()["c"]
+            pending = conn.execute(
+                "SELECT COUNT(*) AS c FROM user_memories WHERE " + visible
+                + " AND valid_to IS NULL AND status='pending'",
+                tuple(params),
+            ).fetchone()["c"]
             kinds = {
                 row["kind"]: row["c"]
                 for row in conn.execute(
@@ -445,6 +631,7 @@ class UserMemoryService:
             ).fetchone()["c"]
             return {
                 "active": int(active),
+                "pending": int(pending),
                 "superseded": int(total - active),
                 "kinds": kinds,
                 "avg_confidence": round(float(avg or 0), 3),

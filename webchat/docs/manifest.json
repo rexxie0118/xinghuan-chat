@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-24",
+      "title": "共享记忆审批、审计回滚与后台整理",
+      "date": "2026-11-24",
+      "summary": "共享记忆 pending→approve/reject；删除 snapshot + audit undo；每日 consolidation job。",
+      "record": "iterations/2026-11-24-24.html",
+      "diagrams": [
+        "architecture/2026-11-24-memory-approval.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-23",
       "title": "记忆治理：scope 与 provenance",
       "date": "2026-11-24",
@@ -608,6 +618,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-memory-scope.svg",
       "note": "scope-aware 记忆和 provenance 已落地；完整审批流待办。"
+    },
+    {
+      "id": "2026-11-24-v35",
+      "label": "v35 · Memory Approval",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-memory-approval.svg",
+      "note": "审批、删除回滚和后台整理已落地；共享整理和 dry-run 待办。"
     }
   ]
 }

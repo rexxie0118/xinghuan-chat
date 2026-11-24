@@ -155,7 +155,12 @@ v34 已完成
   personal / department / org scope
   scope_id 可见性与写入权限
   source_uri / evidence_snippet / created_by
-  memory_write / memory_delete 审计事件</pre>
+  memory_write / memory_delete 审计事件
+
+v35 已完成
+  共享记忆 pending → approve / reject
+  审计快照与 undo
+  后台 consolidation job</pre>
     <p class="muted">
       当前仍是 per-user 记忆，近重复判断是词法相似度，不是 embedding 语义聚类；
       整理需要手动触发；没有团队记忆、审批流和记忆评测。
@@ -188,14 +193,14 @@ v34 已完成
         <tr>
           <td>P1</td>
           <td>审核与审计</td>
-          <td>create/delete 写 audit_events（已完成）；审核/回滚待办。</td>
-          <td><span class="status done">部分完成 · v34</span></td>
+          <td>pending → approve/reject；delete 保存 snapshot，可 undo；create/delete 都写 audit_events。</td>
+          <td><span class="status done">完成 · v35</span></td>
         </tr>
         <tr>
           <td>P1</td>
           <td>记忆整理任务</td>
-          <td>后台定期 consolidation；支持 dry-run、归档、导出和用户确认。</td>
-          <td><span class="status pending">待办</span></td>
+          <td>后台定期 consolidation；当前只处理个人记忆，尚未做 dry-run/导出确认。</td>
+          <td><span class="status done">基础完成 · v35</span></td>
         </tr>
         <tr>
           <td>P2</td>
@@ -227,7 +232,7 @@ v34 已完成
 
   <section>
     <h2>建议顺序</h2>
-    <pre class="record-pre">P1 治理        scope ✅ → provenance ✅ → approval/audit（部分）→ consolidation job
+    <pre class="record-pre">P1 治理        scope ✅ → provenance ✅ → approval ✅ → audit rollback ✅ → consolidation job ✅
 P2 评测        constraint / stale / conflict / access / provenance
 P3 协作        department memory → role views → write authority
 P4 高级能力    时间 KG / 多模态 / 语义聚类（按需）</pre>

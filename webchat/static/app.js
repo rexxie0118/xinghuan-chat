@@ -2917,6 +2917,12 @@
     return ({ personal: "个人", department: "部门", org: "全公司" })[scope] || "个人";
   }
 
+  function canApproveMemory(memory) {
+    const role = state.user?.role || "member";
+    if (role === "admin") return true;
+    return role === "manager" && memory.scope === "department" && memory.scope_id === state.user?.department;
+  }
+
   function canDeleteMemory(memory) {
     if ((memory.scope || "personal") === "personal") return true;
     const role = state.user?.role || "member";
@@ -2959,7 +2965,9 @@
           <button class="memory-filter" data-memory-filter="fact" type="button">事实</button>
           <button class="memory-filter" data-memory-filter="preference" type="button">偏好</button>
           <button class="memory-filter" data-memory-filter="task" type="button">任务</button>
+          <button class="memory-filter" data-memory-filter="pending" type="button">待审批</button>
           <button class="memory-consolidate" type="button" data-memory-consolidate title="合并近重复并清理过期低价值记忆">整理</button>
+          <button class="memory-consolidate" type="button" data-memory-undo title="撤销最近一次记忆删除">撤销删除</button>
           <span class="memory-count"></span>
         </div>
         <div class="memory-list"></div>
@@ -2976,6 +2984,7 @@
     const countEl = card.querySelector(".memory-count");
     const statsEl = card.querySelector(".memory-stats");
     const consolidateBtn = card.querySelector("[data-memory-consolidate]");
+    const undoBtn = card.querySelector("[data-memory-undo]");
     const form = card.querySelector(".memory-form");
     const input = form.querySelector("input");
     const kind = form.querySelector("select[aria-label='记忆类型']");
@@ -2985,11 +2994,15 @@
     let filter = "all";
 
     function render() {
-      const visible = filter === "all" ? memories : memories.filter((m) => m.kind === filter);
+      const visible = filter === "all"
+        ? memories
+        : filter === "pending"
+          ? memories.filter((m) => m.status === "pending")
+          : memories.filter((m) => m.kind === filter);
       countEl.textContent = `${visible.length} / ${memories.length}`;
       if (statsEl) {
         statsEl.textContent = stats
-          ? `有效 ${stats.active} 条 · 已归档 ${stats.superseded} 条 · 平均置信度 ${stats.avg_confidence}`
+          ? `有效 ${stats.active} 条 · 待审批 ${stats.pending || 0} 条 · 已归档 ${stats.superseded} 条 · 平均置信度 ${stats.avg_confidence}`
           : "";
       }
       if (!visible.length) {
@@ -3006,6 +3019,8 @@
             <div class="memory-card-top">
               <span class="memory-kind ${kindClass}">${memoryKindLabel(memory.kind)}</span>
               <span class="memory-scope">${memoryScopeLabel(memory.scope)}</span>
+              ${memory.status === "pending" ? `<span class="memory-status">待审批</span>` : ""}
+              ${memory.status === "pending" && canApproveMemory(memory) ? `<button class="memory-approve" data-memory-approve="${escapeHtml(memory.id)}" type="button">通过</button><button class="memory-reject" data-memory-reject="${escapeHtml(memory.id)}" type="button">拒绝</button>` : ""}
               <time>${memoryDate(memory.created_at)}</time>
               ${canDeleteMemory(memory) ? `<button class="memory-delete" type="button" data-memory-delete="${escapeHtml(memory.id)}" title="删除这条记忆">
                 <svg class="icon"><use href="#i-trash"/></svg>
@@ -3063,6 +3078,39 @@
         });
         render();
       });
+    });
+
+    listEl.addEventListener("click", async (event) => {
+      const approve = event.target.closest("[data-memory-approve]");
+      const reject = event.target.closest("[data-memory-reject]");
+      if (!approve && !reject) return;
+      const button = approve || reject;
+      const id = approve?.dataset.memoryApprove || reject?.dataset.memoryReject;
+      button.disabled = true;
+      try {
+        await api(`/api/memories/${encodeURIComponent(id)}/${approve ? "approve" : "reject"}`, { method: "POST" });
+        toast(approve ? "已通过共享记忆" : "已拒绝共享记忆");
+        await refresh();
+      } catch (err) {
+        toast(err.message, "error");
+        button.disabled = false;
+      }
+    });
+
+    undoBtn.addEventListener("click", async () => {
+      undoBtn.disabled = true;
+      try {
+        const data = await api("/api/audit?event_type=memory_delete&limit=1");
+        const event = (data.events || [])[0];
+        if (!event) throw new Error("没有可撤销的删除事件");
+        await api(`/api/audit/${encodeURIComponent(event.id)}/undo`, { method: "POST" });
+        toast("已恢复最近删除的记忆");
+        await refresh();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        undoBtn.disabled = false;
+      }
     });
 
     consolidateBtn.addEventListener("click", async () => {
