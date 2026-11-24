@@ -86,13 +86,25 @@ class ApiTest(unittest.TestCase):
             bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
             self.assertEqual(bad.status_code, 400)
 
+    def test_admin_users_endpoint_requires_admin(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            denied = client.get("/api/admin/users")
+            self.assertEqual(denied.status_code, 403)
+            self.login(client, "admin", "admin1234")
+            allowed = client.get("/api/admin/users")
+            self.assertEqual(allowed.status_code, 200)
+            self.assertTrue(any(u["role"] == "admin" for u in allowed.json()["users"]))
+
     def test_memory_ui_entry_is_served(self):
         with TestClient(self.app) as client:
             page = client.get("/")
             self.assertEqual(page.status_code, 200)
             self.assertIn('id="memory-btn"', page.text)
             self.assertIn('id="connector-btn"', page.text)
+            self.assertIn('id="admin-btn"', page.text)
             js = client.get("/static/app.js")
+            self.assertIn("openAdminUsers", js.text)
             self.assertEqual(js.status_code, 200)
             self.assertIn("openMemoryManager", js.text)
             self.assertIn("openConnectorManager", js.text)

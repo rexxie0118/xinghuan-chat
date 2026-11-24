@@ -810,7 +810,9 @@
     state.citations = [];
     showApp();
     $("#user-name").textContent = user.display_name || user.username;
-    $("#user-subtitle").textContent = `${user.department || "未分组"} · 本地演示账号`;
+    $("#user-subtitle").textContent = `${user.department || "未分组"} · ${user.role || "member"}`;
+    const adminBtn = $("#admin-btn");
+    if (adminBtn) adminBtn.hidden = user.role !== "admin";
     $("#user-avatar").textContent = (user.display_name || user.username).slice(0, 1).toUpperCase();
     document.title = "星环 Chat";
     try {
@@ -2384,6 +2386,89 @@
     return root;
   }
 
+  async function openAdminUsers() {
+    const root = modalShell();
+    const card = document.createElement("div");
+    card.className = "modal-card admin-modal";
+    card.innerHTML = `
+      <div class="admin-head">
+        <div>
+          <p class="eyebrow">ACCESS CONTROL</p>
+          <h3>用户权限</h3>
+          <p>部门决定默认知识库和部门 Agent；角色决定管理范围。</p>
+        </div>
+        <button class="icon-btn admin-close" type="button" aria-label="关闭用户权限">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div class="admin-body">
+        <div class="admin-list"></div>
+        <p class="admin-note">admin 可见全部部门；manager/member 默认只看本部门。修改后用户下次请求生效。</p>
+      </div>`;
+    root.append(card);
+    const close = () => { root.hidden = true; };
+    card.querySelector(".admin-close").addEventListener("click", close);
+    root.onclick = (event) => { if (event.target === root) close(); };
+    const list = card.querySelector(".admin-list");
+    const departments = state.meta?.departments || ["产品部", "研发部", "人事部"];
+
+    function render(users) {
+      list.innerHTML = users.map((user) => `
+        <div class="admin-user" data-admin-user="${escapeHtml(user.id)}">
+          <div class="admin-user-id">
+            <strong>${escapeHtml(user.display_name || user.username)}</strong>
+            <small>@${escapeHtml(user.username)}</small>
+          </div>
+          <label class="admin-field">部门
+            <select data-admin-department>
+              ${departments.map((department) => `<option value="${escapeHtml(department)}" ${department === user.department ? "selected" : ""}>${escapeHtml(department)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="admin-field">角色
+            <select data-admin-role>
+              <option value="member" ${user.role === "member" ? "selected" : ""}>member</option>
+              <option value="manager" ${user.role === "manager" ? "selected" : ""}>manager</option>
+              <option value="admin" ${user.role === "admin" ? "selected" : ""}>admin</option>
+            </select>
+          </label>
+          <button class="admin-save" type="button" data-admin-save>保存</button>
+        </div>`).join("");
+    }
+
+    async function refresh() {
+      try {
+        const data = await api("/api/admin/users");
+        render(data.users || []);
+      } catch (err) {
+        list.innerHTML = `<div class="connector-empty">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    list.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-admin-save]");
+      if (!button) return;
+      const row = button.closest("[data-admin-user]");
+      const id = row.dataset.adminUser;
+      button.disabled = true;
+      try {
+        const data = await api(`/api/admin/users/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: {
+            department: row.querySelector("[data-admin-department]").value,
+            role: row.querySelector("[data-admin-role]").value,
+          },
+        });
+        toast(`已更新 ${data.user.display_name || data.user.username}`);
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    await refresh();
+  }
+
   function connectorDate(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "";
@@ -3565,6 +3650,11 @@
   // Delegated fallback: the memory entry is also reachable if an earlier
   // binding throws or a stale app.js is cached.
   document.addEventListener("click", (event) => {
+    if (event.target.closest("#admin-btn")) {
+      event.preventDefault();
+      openAdminUsers();
+      return;
+    }
     if (event.target.closest("#connector-btn")) {
       event.preventDefault();
       openConnectorManager();

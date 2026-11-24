@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-19",
+      "title": "用户权限管理界面",
+      "date": "2026-11-24",
+      "summary": "admin-only 用户权限弹窗：列出用户、修改部门/角色；demo 提供 admin 账号。",
+      "record": "iterations/2026-11-24-19.html",
+      "diagrams": [
+        "architecture/2026-11-24-admin-ui.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-18",
       "title": "部门 RBAC 与默认 Agent/KB",
       "date": "2026-11-24",
@@ -523,6 +533,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-rbac.svg",
       "note": "部门默认 KB/Agent 和 admin/manager/member 角色已落地。"
+    },
+    {
+      "id": "2026-11-24-v30",
+      "label": "v30 · User Permission UI",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-admin-ui.svg",
+      "note": "admin 用户管理 UI 已落地；无删除/最后一个 admin 保护。"
     }
   ]
 }

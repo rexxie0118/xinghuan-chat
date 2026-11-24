@@ -7,7 +7,7 @@
   <meta name="description" content="星环 Chat — 带 RAG、本体图谱与多用户会话的 AI 工作台演示。">
   <title>星环 Chat · Ontology-aware AI Workspace</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20261124-citations">
+  <link rel="stylesheet" href="/static/styles.css?v=20261124-admin">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -275,6 +275,10 @@
               <span>Agent</span>
             </button>
           </div>
+          <button id="admin-btn" class="docs-btn admin-btn" type="button" title="管理用户部门与角色" hidden>
+            <svg class="icon"><use href="#i-user"/></svg>
+            <span>用户权限</span>
+          </button>
           <button id="connector-btn" class="docs-btn connector-btn" type="button" title="管理联网连接器">
             <svg class="icon"><use href="#i-orbit"/></svg>
             <span>连接器</span>
@@ -470,6 +474,6 @@
   <div id="modal-root" class="modal-root" hidden></div>
   <div id="entity-sheet" class="entity-sheet" hidden></div>
 
-  <script src="/static/app.js?v=20261124-citations" defer></script>
+  <script src="/static/app.js?v=20261124-admin" defer></script>
 </body>
 </html>

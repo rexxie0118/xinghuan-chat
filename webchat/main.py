@@ -72,6 +72,13 @@ DEMO_ACCOUNTS = [
     {"username": "demo", "password": "demo1234", "display_name": "演示用户", "department": "产品部"},
     {"username": "alice", "password": "alice1234", "display_name": "Alice", "department": "研发部"},
     {"username": "bob", "password": "bob1234", "display_name": "Bob", "department": "人事部"},
+    {
+        "username": "admin",
+        "password": "admin1234",
+        "display_name": "管理员",
+        "department": "产品部",
+        "role": "admin",
+    },
 ]
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-\u4e00-\u9fff]{3,24}$")
@@ -230,11 +237,19 @@ def _seed_demo_users(conn: sqlite3.Connection) -> None:
                 display_name=account["display_name"],
                 password_hash=hash_password(account["password"]),
                 department=account["department"],
+                role=str(account.get("role") or "member"),
             )
             LOG.info("Seeded demo user %s (%s)", account["username"], account["department"])
-        elif row["department"] != account["department"]:
-            # Upgrade databases seeded before department support.
-            repo.set_user_department(conn, row["id"], account["department"])
+        else:
+            if row["department"] != account["department"]:
+                # Upgrade databases seeded before department support.
+                repo.set_user_department(conn, row["id"], account["department"])
+            if account.get("role") == "admin" and (
+                "role" not in row.keys() or row["role"] != "admin"
+            ):
+                repo.update_user_role_department(
+                    conn, row["id"], role="admin", department=account["department"]
+                )
 
 
 def _clean_username(value: str) -> str:
