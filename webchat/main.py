@@ -173,6 +173,7 @@ class MessageIn(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
     mode: Literal["rag", "agent"] = "agent"
     agent_id: str | None = Field(default=None, max_length=40)
+    live: bool = False
 
 
 # -------------------------------------------------------------------- utils
@@ -1276,7 +1277,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     user_id=user["id"],
                     role="user",
                     content=content,
-                    meta={"mode": payload.mode, "agent_id": payload.agent_id},
+                    meta={"mode": payload.mode, "agent_id": payload.agent_id, "live": payload.live},
                 )
                 title = repo.auto_title_if_needed(
                     db,
@@ -1321,6 +1322,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         kb=service,
                         imported_agent=imported_agent,
                         on_status=status,
+                        live=payload.live,
                         cancel_token=cancel_token,
                     )
                     wdb = connect(settings.db_path)

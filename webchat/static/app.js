@@ -17,6 +17,7 @@
     agentId: null,
     messages: [],
     mode: "agent",
+    live: false,
     sending: false,
     citations: [],
     graph: null,
@@ -1222,8 +1223,14 @@
     });
     updateAgentPicker();
     if (state.mode !== "agent") closeAgentMenu();
+    if (state.mode === "agent") state.live = false;
+    updateLiveToggle();
     $("#composer-hint").textContent =
-      state.mode === "agent" ? "可调用导入 Agent 与脚本" : "检索知识库后直接回答";
+      state.mode === "agent"
+        ? "可调用导入 Agent 与脚本"
+        : state.live
+          ? "Chat + 联网连接器"
+          : "检索知识库后直接回答";
     if (!opts.silent) {
       const conv = state.conversations.find((c) => c.id === state.activeId);
       if (conv) conv.mode = state.mode;
@@ -1669,7 +1676,7 @@
       content: text,
       created_at: now,
       citations: [],
-      meta: { mode: state.mode },
+      meta: { mode: state.mode, live: state.live },
     };
     state.messages.push(userMessage);
     $("#messages").append(buildMessage(userMessage));
@@ -1702,6 +1709,7 @@
             content: text,
             mode: state.mode,
             agent_id: state.mode === "agent" ? state.agentId : null,
+            live: state.live,
           }),
         }
       );
@@ -1845,6 +1853,16 @@
     input.style.height = Math.min(190, Math.max(26, input.scrollHeight)) + "px";
   }
 
+  function updateLiveToggle() {
+    const button = $("#live-toggle");
+    if (!button) return;
+    button.hidden = state.mode !== "rag";
+    button.classList.toggle("active", state.live);
+    button.setAttribute("aria-pressed", String(state.live));
+    const label = button.querySelector("span");
+    if (label) label.textContent = state.live ? "联网 · 开" : "联网";
+  }
+
   function updateComposer() {
     const input = $("#message-input");
     $("#send-btn").disabled = state.sending || !input.value.trim();
@@ -1859,7 +1877,10 @@
       ? "正在生成回答…"
       : state.mode === "agent"
         ? "可调用导入 Agent 与脚本"
-        : "检索知识库后直接回答";
+        : state.live
+          ? "Chat + 联网连接器"
+          : "检索知识库后直接回答";
+    updateLiveToggle();
     updateAgentPicker();
   }
 
@@ -3402,6 +3423,11 @@
     $("#agent-picker").addEventListener("click", (event) => {
       event.stopPropagation();
       toggleAgentMenu();
+    });
+    $("#live-toggle").addEventListener("click", () => {
+      if (state.mode !== "rag") return;
+      state.live = !state.live;
+      updateComposer();
     });
     $("#agent-nav-toggle").addEventListener("click", (event) => {
       event.stopPropagation();

@@ -146,6 +146,7 @@ class AgentRunner:
         kb: KnowledgeService,
         imported_agent: ImportedAgent | None = None,
         on_status: StatusFn | None = None,
+        live: bool = False,
         cancel_token: CancellationToken | None = None,
     ) -> AgentResult:
         mode = "rag" if mode == "rag" else "agent"
@@ -327,7 +328,7 @@ class AgentRunner:
             if external is not None:
                 return external
 
-        if mode == "agent" and imported_agent is None:
+        if (mode == "agent" or live) and imported_agent is None:
             self._check_cancel(cancel_token)
             tool_result = self._run_tool_loop(
                 question=question,
@@ -766,6 +767,7 @@ class AgentRunner:
             warnings=warnings,
             meta={
                 "answer_mode": "tool_loop",
+                "live": True,
                 "confidence": 0.65,
                 "tool_steps": tool_steps,
                 "tools_used": tools_used,

@@ -1868,3 +1868,15 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
   .connector-head, .connector-body { padding-left: 14px; padding-right: 14px; }
   .connector-tabs { padding-left: 14px; padding-right: 14px; }
 }
+
+
+/* ---------------------------------------------------------- live toggle */
+.live-toggle {
+  height: 28px; padding: 0 8px; border: 1px solid var(--line);
+  border-radius: 7px; display: inline-flex; align-items: center; gap: 4px;
+  color: var(--faint); background: transparent; font-size: 9px;
+}
+.live-toggle .icon { width: 11px; height: 11px; }
+.live-toggle:hover { color: var(--text); border-color: var(--line-strong); }
+.live-toggle.active { color: var(--accent); border-color: rgba(140,166,255,.35); background: var(--accent-soft); }
+.live-toggle[hidden] { display: none; }

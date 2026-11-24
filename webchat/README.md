@@ -987,6 +987,36 @@ Tool Loop 中：
 
 严格 RAG prompt 使用 `answer.max_context_tokens`（默认 7000）；超出后压缩证据并过滤已删除的引用编号。
 
+### Chat 模式联网开关
+
+Chat 模式下，输入框左侧有「联网」按钮。打开后请求体带：
+
+```json
+{"mode": "rag", "live": true}
+```
+
+后端条件从：
+
+```python
+if mode == "agent":
+```
+
+变为：
+
+```python
+if (mode == "agent" or live) and imported_agent is None:
+```
+
+所以 Chat 模式可以按需进入 Tool Loop：
+
+```text
+Chat + 联网
+→ 本地 RAG + 连接器工具
+→ 天气/新闻等实时查询
+```
+
+默认关闭，避免每条普通问答都调用工具。
+
 ### Tool Loop
 
 Agent 模式下，如果：

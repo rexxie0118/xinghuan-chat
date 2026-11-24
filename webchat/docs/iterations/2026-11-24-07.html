@@ -1,0 +1,97 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-07</div>
+    <h1>Chat 模式联网开关</h1>
+    <p class="lede">
+      Chat 输入框新增「联网」开关：默认关闭；打开后 Chat 可以进入 Tool Loop，
+      调用已注册的连接器查询天气/新闻等实时信息。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：64 项通过</span>
+      <span>架构：v18</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>变化</h2>
+    <pre class="record-pre">UI:
+Chat + 联网（默认关）
+→ request.live = true
+
+backend:
+if (mode == "agent" or live) and imported_agent is None:
+    tool_loop()
+
+Agent 模式仍然默认允许工具。</pre>
+  </section>
+
+  <section>
+    <h2>真实验证</h2>
+    <pre class="record-pre">Chat + live=true
+问题：北京今天天气怎么样？
+→ connector.weather_geocode
+→ connector.weather_current
+→ 北京当前天气：晴，0.3℃，湿度 28%
+
+answer_mode=tool_loop
+tool_steps=2</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>联网开关只在 Chat 模式显示；Agent 模式默认有工具。</li>
+      <li>没有连接器时，live 仍会回退普通 RAG。</li>
+      <li>外部来源还没有统一引用面板，当前在回答正文中给出来源。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-chat-live.svg" alt="v18 chat live" />
+      <figcaption>v18：Chat 默认为本地 RAG，打开联网后按需进入 Tool Loop。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">22 项完成，8 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>声明式联网连接器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>连接器管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Chat 模式联网开关</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

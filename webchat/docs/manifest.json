@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-07",
+      "title": "Chat 模式联网开关",
+      "date": "2026-11-24",
+      "summary": "Chat 输入框新增联网开关；live=true 时按需进入 Tool Loop，调用已注册连接器。",
+      "record": "iterations/2026-11-24-07.html",
+      "diagrams": [
+        "architecture/2026-11-24-chat-live.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-06",
       "title": "修复 weather_geocode 400",
       "date": "2026-11-24",
@@ -319,6 +329,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-connector-ui.svg",
       "note": "连接器管理 UI 已落地；外部来源引用仍待做。"
+    },
+    {
+      "id": "2026-11-24-v18",
+      "label": "v18 · Chat Live",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-chat-live.svg",
+      "note": "Chat 联网开关已落地；外部来源引用仍待统一。"
     }
   ]
 }
