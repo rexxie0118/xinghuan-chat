@@ -1,0 +1,71 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-25-02</div>
+    <h1>顶栏清理：移除重复模式切换与引擎标签</h1>
+    <p class="lede">
+      输入框下方已有 Chat / Agent，顶部重复的切换移除；顶部“本地 Agent”只是
+      meta.agent_enabled 的展示，没有操作意义，也一并移除。消息级引擎徽章保留。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：123 项通过</span>
+      <span>架构：v48</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>变化</h2>
+    <pre class="record-pre">顶部移除
+  Chat / Agent 切换
+  本地 Agent / 外部 Agent 标签
+
+保留
+  输入框下方 Chat / Agent
+  每条回答的 engine / mode / answer_mode 徽章
+  知识面板按钮</pre>
+  </section>
+
+  <section>
+    <h2>原因</h2>
+    <ul>
+      <li>顶部和底部切换同一个 state.mode，重复；</li>
+      <li>“本地 Agent”只表示 WEBCHAT_AGENT_URL 是否配置，不是当前对话模式；</li>
+      <li>真正的每条回答引擎状态仍在消息头显示；</li>
+      <li>减少顶栏横向占用。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">页面顶部 mode-switch = 0
+engine-badge = 0
+输入框 composer-switch = 保留
+123 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-25-mode-cleanup.svg" alt="v48 topbar cleanup" />
+      <figcaption>v48：模式切换只保留在输入框区域。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">10 个已完成里程碑，8 个待办；本次属于 UI 清理。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>OIDC SSO + 本地测试 IdP</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>TLS / 密钥 / 安全基线</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>Postgres 备份恢复 / 高可用</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>多 Worker 压测 / exactly-once 边界</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Prometheus / OTel / 审计导出</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>中文 KB 检索评测</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>真实多模态 / OCR / ASR</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>时间 KG 推理 / as-of 问答</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

@@ -7,7 +7,7 @@
   <meta name="description" content="星环 Chat — 带 RAG、本体图谱与多用户会话的 AI 工作台演示。">
   <title>星环 Chat · Ontology-aware AI Workspace</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20261124-usermenu">
+  <link rel="stylesheet" href="/static/styles.css?v=20261125-modecleanup">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -290,20 +290,6 @@
         </div>
 
         <div class="topbar-actions">
-          <div class="mode-switch" role="group" aria-label="回答引擎">
-            <button data-mode="rag" title="普通对话：只做检索与回答">
-              <svg class="icon"><use href="#i-book"/></svg>
-              <span>Chat</span>
-            </button>
-            <button data-mode="agent" class="active" title="展示工具轨迹">
-              <svg class="icon"><use href="#i-sparkle"/></svg>
-              <span>Agent</span>
-            </button>
-          </div>
-          <span id="engine-badge" class="engine-badge" title="当前 Agent 引擎">
-            <span class="status-dot"></span>
-            <span>本地 Agent</span>
-          </span>
           <button id="panel-toggle" class="icon-btn panel-toggle" aria-label="打开知识面板" title="知识图谱">
             <svg class="icon"><use href="#i-panel"/></svg>
           </button>
@@ -483,6 +469,6 @@
   <div id="modal-root" class="modal-root" hidden></div>
   <div id="entity-sheet" class="entity-sheet" hidden></div>
 
-  <script src="/static/app.js?v=20261124-usermenu" defer></script>
+  <script src="/static/app.js?v=20261125-modecleanup" defer></script>
 </body>
 </html>

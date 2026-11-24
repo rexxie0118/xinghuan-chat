@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-25-02",
+      "title": "顶栏清理：移除重复模式切换与引擎标签",
+      "date": "2026-11-25",
+      "summary": "移除顶栏 Chat/Agent 与本地 Agent 标签；输入框模式和消息徽章保留。",
+      "record": "iterations/2026-11-25-02.html",
+      "diagrams": [
+        "architecture/2026-11-25-mode-cleanup.svg"
+      ]
+    },
+    {
       "id": "2026-11-25-01",
       "title": "KB 向量切到 pgvector + HNSW",
       "date": "2026-11-25",
@@ -819,6 +829,13 @@
       "date": "2026-11-25",
       "src": "architecture/2026-11-25-pgvector.svg",
       "note": "KB 向量使用 pgvector vector(256)+HNSW；FTS 用 pg_trgm 回退。"
+    },
+    {
+      "id": "2026-11-25-v48",
+      "label": "v48 · Topbar Cleanup",
+      "date": "2026-11-25",
+      "src": "architecture/2026-11-25-mode-cleanup.svg",
+      "note": "模式切换只在输入框区域；顶栏只保留知识面板。"
     }
   ]
 }

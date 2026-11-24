@@ -411,7 +411,6 @@
     }
     renderDemoAccounts();
     renderDepartmentOptions();
-    renderEngineBadge();
   }
 
   function renderDepartmentOptions() {
@@ -861,13 +860,6 @@
       });
       wrap.append(btn);
     }
-  }
-
-  function renderEngineBadge() {
-    const badge = $("#engine-badge");
-    const external = Boolean(state.meta?.agent_enabled);
-    badge.classList.toggle("external", external);
-    badge.querySelector("span:last-child").textContent = external ? "外部 Agent" : "本地 Agent";
   }
 
   async function loadOverview() {
