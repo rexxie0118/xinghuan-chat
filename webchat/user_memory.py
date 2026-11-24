@@ -1,4 +1,4 @@
-"""Per-user long-term memory.
+"""Per-user long-term memory with write quality and lifecycle controls.
 
 This is intentionally separate from the KB-wide ``memories`` table: user
 memories are private, scoped by ``user_id``, and never become document
@@ -21,11 +21,35 @@ from .util import iso, new_id
 
 VALID_KINDS = {"fact", "preference", "task"}
 MAX_CONTENT_CHARS = 300
+MIN_AUTO_CONFIDENCE = 0.6
+NEAR_DUPLICATE = 0.90
+MAX_RECALL_CHARS = 1200
 
 _EXPLICIT = re.compile(r"(?:请)?记住[：:，,\s]*(.+)", re.S)
 _NAME = re.compile(r"(?:我叫|我的名字是)\s*([^\s，。,.!?！？]{1,30})")
 _PREFERENCE = re.compile(r"我(?:更|比较)?(?:喜欢|偏好)\s*([^。！？\n]{1,120})")
 _ADDRESS = re.compile(r"以后(?:请)?(?:用|回答用|叫我)\s*([^。！？\n]{1,60})")
+
+
+def _normalise(text: str) -> str:
+    return re.sub(r"[\s\W_]+", "", (text or "").lower())
+
+
+def _similarity(left: str, right: str) -> float:
+    a = {token for token, _ in embed_tokens(_normalise(left))}
+    b = {token for token, _ in embed_tokens(_normalise(right))}
+    if not a or not b:
+        return 1.0 if _normalise(left) == _normalise(right) and _normalise(left) else 0.0
+    return len(a & b) / len(a | b)
+
+
+def _quality(candidate: dict[str, Any]) -> tuple[bool, str]:
+    content = str(candidate.get("content") or "").strip()
+    if len(_normalise(content)) < 3:
+        return False, "too_short"
+    if float(candidate.get("confidence") or 0) < MIN_AUTO_CONFIDENCE:
+        return False, "low_confidence"
+    return True, ""
 
 
 def extract_candidates(text: str) -> list[dict[str, Any]]:
@@ -93,6 +117,7 @@ class UserMemoryService:
         confidence: float = 0.7,
         source_conversation_id: str = "",
         source_message_id: str = "",
+        auto: bool = False,
     ) -> dict[str, Any]:
         if kind not in VALID_KINDS:
             raise ValueError(f"未知记忆类型：{kind}")
@@ -102,39 +127,48 @@ class UserMemoryService:
         subject = (subject or "").strip()[:80]
         predicate = (predicate or "").strip()[:80]
         object_text = (object_text or content).strip()[:MAX_CONTENT_CHARS]
+        if auto:
+            ok, reason = _quality(
+                {
+                    "content": content,
+                    "confidence": confidence,
+                }
+            )
+            if not ok:
+                return {"status": "skipped", "reason": reason}
         now = iso()
         conn = self._conn()
         try:
             with conn:
-                existing = None
-                if subject and predicate:
-                    existing = conn.execute(
-                        "SELECT * FROM user_memories WHERE user_id=? AND valid_to IS NULL"
-                        " AND subject=? AND predicate=? AND object_text=?",
-                        (user_id, subject, predicate, object_text),
-                    ).fetchone()
-                else:
-                    existing = conn.execute(
-                        "SELECT * FROM user_memories WHERE user_id=? AND valid_to IS NULL"
-                        " AND content=?",
-                        (user_id, content),
-                    ).fetchone()
-                if existing is not None:
-                    conn.execute(
-                        "UPDATE user_memories SET hits=hits+1, last_used_at=?, updated_at=?"
-                        " WHERE id=?",
-                        (now, now, existing["id"]),
+                active = conn.execute(
+                    "SELECT * FROM user_memories WHERE user_id=? AND valid_to IS NULL",
+                    (user_id,),
+                ).fetchall()
+
+                # 1. Near-duplicate / exact duplicate: merge into the existing row.
+                for row in active:
+                    duplicate = (
+                        (subject and predicate and row["subject"] == subject
+                         and row["predicate"] == predicate and row["object_text"] == object_text)
+                        or _normalise(row["content"]) == _normalise(content)
+                        or _similarity(row["content"], content) >= NEAR_DUPLICATE
                     )
-                    return {"status": "duplicate", "id": existing["id"]}
+                    if not duplicate:
+                        continue
+                    conn.execute(
+                        "UPDATE user_memories SET hits=hits+1, last_used_at=?, updated_at=?,"
+                        " importance=MAX(importance, ?), confidence=MAX(confidence, ?)"
+                        " WHERE id=?",
+                        (now, now, float(importance), float(confidence), row["id"]),
+                    )
+                    return {"status": "duplicate", "id": row["id"]}
 
                 memory_id = new_id("umem")
                 superseded: list[str] = []
                 if subject and predicate:
-                    for row in conn.execute(
-                        "SELECT id FROM user_memories WHERE user_id=? AND valid_to IS NULL"
-                        " AND subject=? AND predicate=?",
-                        (user_id, subject, predicate),
-                    ).fetchall():
+                    for row in active:
+                        if row["subject"] != subject or row["predicate"] != predicate:
+                            continue
                         conn.execute(
                             "UPDATE user_memories SET valid_to=?, superseded_by=?, updated_at=?"
                             " WHERE id=?",
@@ -147,8 +181,8 @@ class UserMemoryService:
                     INSERT INTO user_memories(id, user_id, kind, content, subject,
                         predicate, object_text, importance, confidence, hits,
                         source_conversation_id, source_message_id, created_at,
-                        updated_at, last_used_at, valid_to, superseded_by)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        updated_at, last_used_at, valid_from, valid_to, superseded_by)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         memory_id,
@@ -163,6 +197,7 @@ class UserMemoryService:
                         0,
                         source_conversation_id,
                         source_message_id,
+                        now,
                         now,
                         now,
                         now,
@@ -189,12 +224,20 @@ class UserMemoryService:
                     user_id,
                     source_conversation_id=conversation_id,
                     source_message_id=message_id,
+                    auto=True,
                     **candidate,
                 )
             )
         return results
 
-    def recall(self, user_id: str, query: str, *, k: int = 5) -> list[dict[str, Any]]:
+    def recall(
+        self,
+        user_id: str,
+        query: str,
+        *,
+        k: int = 5,
+        max_chars: int = MAX_RECALL_CHARS,
+    ) -> list[dict[str, Any]]:
         query = (query or "").strip()
         conn = self._conn()
         try:
@@ -224,25 +267,134 @@ class UserMemoryService:
                 except (TypeError, ValueError):
                     idle_days = 0.0
                 if lexical <= 0 and item["kind"] != "preference":
-                    # Facts are only useful when the current question shares a
-                    # term; preferences apply across topics.
                     continue
                 recency = math.exp(-0.01 * idle_days)
-                score = 0.65 * lexical + 0.25 * float(item["importance"]) + 0.10 * recency
+                score = (
+                    0.55 * lexical
+                    + 0.20 * float(item["importance"])
+                    + 0.15 * float(item["confidence"])
+                    + 0.10 * recency
+                    + (0.03 if item["kind"] == "preference" else 0.0)
+                )
                 item["score"] = round(score, 4)
                 scored.append(item)
             scored.sort(key=lambda x: (-x["score"], x["last_used_at"]))
-            top = scored[: max(1, min(int(k), 12))]
-            if top:
-                ts = iso()
+
+            selected: list[dict[str, Any]] = []
+            used_chars = 0
+            for item in scored:
+                if len(selected) >= max(1, min(int(k), 12)):
+                    break
+                if any(_similarity(item["content"], prev["content"]) >= NEAR_DUPLICATE for prev in selected):
+                    continue
+                if used_chars + len(item["content"]) > max(120, int(max_chars)):
+                    continue
+                selected.append(item)
+                used_chars += len(item["content"])
+
+            if selected:
                 with conn:
                     conn.executemany(
                         "UPDATE user_memories SET hits=hits+1, last_used_at=? WHERE id=?",
-                        [(ts, item["id"]) for item in top],
+                        [(iso(), item["id"]) for item in selected],
                     )
-                for item in top:
+                for item in selected:
                     item["hits"] = int(item["hits"]) + 1
-            return top
+            return selected
+        finally:
+            conn.close()
+
+    def consolidate(self, user_id: str, *, expire_days: int = 0) -> dict[str, Any]:
+        """Merge near-duplicate active memories and optionally expire stale low-value ones."""
+        conn = self._conn()
+        merged = 0
+        expired = 0
+        now = iso()
+        try:
+            with conn:
+                rows = conn.execute(
+                    "SELECT * FROM user_memories WHERE user_id=? AND valid_to IS NULL",
+                    (user_id,),
+                ).fetchall()
+                rows = sorted(
+                    rows,
+                    key=lambda row: (
+                        float(row["confidence"]) * 0.6 + float(row["importance"]) * 0.4,
+                        row["updated_at"],
+                    ),
+                    reverse=True,
+                )
+                discarded: set[str] = set()
+                for index, row in enumerate(rows):
+                    if row["id"] in discarded:
+                        continue
+                    for other in rows[index + 1:]:
+                        if other["id"] in discarded:
+                            continue
+                        same_slot = (
+                            row["subject"]
+                            and row["subject"] == other["subject"]
+                            and row["predicate"] == other["predicate"]
+                        )
+                        if not same_slot and _similarity(row["content"], other["content"]) < NEAR_DUPLICATE:
+                            continue
+                        conn.execute(
+                            "UPDATE user_memories SET valid_to=?, superseded_by=?, updated_at=?"
+                            " WHERE id=?",
+                            (now, row["id"], now, other["id"]),
+                        )
+                        discarded.add(other["id"])
+                        merged += 1
+
+                if expire_days > 0:
+                    cutoff = datetime.now(timezone.utc).timestamp() - expire_days * 86400
+                    for row in rows:
+                        if row["id"] in discarded:
+                            continue
+                        try:
+                            created = datetime.fromisoformat(row["created_at"]).timestamp()
+                        except (TypeError, ValueError):
+                            continue
+                        if created < cutoff and float(row["importance"]) < 0.3:
+                            conn.execute(
+                                "UPDATE user_memories SET valid_to=?, updated_at=? WHERE id=?",
+                                (now, now, row["id"]),
+                            )
+                            expired += 1
+        finally:
+            conn.close()
+        return {"merged": merged, "expired": expired, "stats": self.stats(user_id)}
+
+    def stats(self, user_id: str) -> dict[str, Any]:
+        conn = self._conn()
+        try:
+            active = conn.execute(
+                "SELECT COUNT(*) AS c FROM user_memories WHERE user_id=? AND valid_to IS NULL",
+                (user_id,),
+            ).fetchone()["c"]
+            total = conn.execute(
+                "SELECT COUNT(*) AS c FROM user_memories WHERE user_id=?",
+                (user_id,),
+            ).fetchone()["c"]
+            kinds = {
+                row["kind"]: row["c"]
+                for row in conn.execute(
+                    "SELECT kind, COUNT(*) AS c FROM user_memories"
+                    " WHERE user_id=? AND valid_to IS NULL GROUP BY kind",
+                    (user_id,),
+                ).fetchall()
+            }
+            avg = conn.execute(
+                "SELECT AVG(confidence) AS c FROM user_memories"
+                " WHERE user_id=? AND valid_to IS NULL",
+                (user_id,),
+            ).fetchone()["c"]
+            return {
+                "active": int(active),
+                "superseded": int(total - active),
+                "kinds": kinds,
+                "avg_confidence": round(float(avg or 0), 3),
+            }
         finally:
             conn.close()
 

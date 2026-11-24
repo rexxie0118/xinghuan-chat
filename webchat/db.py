@@ -136,6 +136,7 @@ SCHEMA = [
         source_conversation_id TEXT NOT NULL DEFAULT '',
         source_message_id      TEXT NOT NULL DEFAULT '',
         created_at             TEXT NOT NULL,
+        valid_from             TEXT NOT NULL DEFAULT '',
         updated_at             TEXT NOT NULL,
         last_used_at           TEXT NOT NULL,
         valid_to               TEXT,
@@ -327,6 +328,11 @@ def init_db(path: Path | str) -> None:
                 conn,
                 "conversations",
                 {"kb_id": "TEXT NOT NULL DEFAULT 'product'"},
+            )
+            _ensure_columns(
+                conn,
+                "user_memories",
+                {"valid_from": "TEXT NOT NULL DEFAULT ''"},
             )
             _ensure_columns(
                 conn,

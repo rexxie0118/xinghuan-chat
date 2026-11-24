@@ -138,6 +138,7 @@ class MemoryIn(BaseModel):
     predicate: str = Field(default="", max_length=80)
     object_text: str = Field(default="", max_length=300)
     importance: float = Field(default=0.7, ge=0, le=1)
+    confidence: float = Field(default=0.8, ge=0, le=1)
 
 
 class ConnectorIn(BaseModel):
@@ -594,7 +595,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/memories")
     def list_memories(user: dict[str, Any] = User) -> dict[str, Any]:
-        return {"memories": memory_payload(user)}
+        return {
+            "memories": memory_payload(user),
+            "stats": memory_store.stats(user["id"]),
+        }
 
     @app.post("/api/memories")
     def add_memory(payload: MemoryIn, user: dict[str, Any] = User) -> dict[str, Any]:
@@ -607,10 +611,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 predicate=payload.predicate,
                 object_text=payload.object_text,
                 importance=payload.importance,
+                confidence=payload.confidence,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return {"memory": result, "memories": memory_payload(user)}
+        return {
+            "memory": result,
+            "memories": memory_payload(user),
+            "stats": memory_store.stats(user["id"]),
+        }
+
+    @app.post("/api/memories/consolidate")
+    def consolidate_memories(
+        expire_days: int = Query(default=0, ge=0, le=3650),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        result = memory_store.consolidate(user["id"], expire_days=expire_days)
+        return {
+            "result": result,
+            "memories": memory_payload(user),
+            "stats": memory_store.stats(user["id"]),
+        }
 
     @app.delete("/api/memories/{memory_id}")
     def delete_memory(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:

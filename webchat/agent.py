@@ -311,7 +311,8 @@ class AgentRunner:
                     kind="check",
                     data={"count": len(memories), "kinds": [m.get("kind") for m in memories]},
                     logic=(
-                        "用户级记忆按 user_id 隔离，按词法相似度 + importance + recency 排序；"
+                        "用户级记忆按 user_id 隔离；按词法 0.55 + importance 0.20 + "
+                        "confidence 0.15 + recency 0.10 排序，做近重复过滤和 1200 字预算；"
                         "只进入软上下文，不参与 [n] 文档引用。"
                     ),
                 )

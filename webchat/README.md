@@ -1146,7 +1146,7 @@ WEBCHAT_OBJECT_STORE=s3      # S3 / MinIO / R2 兼容
 user_memories(
   id, user_id, kind, content, subject, predicate, object_text,
   importance, confidence, hits, source_conversation_id, source_message_id,
-  created_at, updated_at, last_used_at, valid_to, superseded_by
+  created_at, updated_at, last_used_at, valid_from, valid_to, superseded_by
 )
 ```
 
@@ -1162,12 +1162,26 @@ user_memories(
 以后叫我 / 回答用...
 ```
 
+写入质量控制：
+
+```text
+自动提取 confidence < 0.6 → skipped
+内容过短 → skipped
+近重复 → 合并到已有记忆
+同 subject/predicate 槽位 → 旧值 valid_to + superseded_by
+```
+
 召回：
 
 ```text
-词法相似度 0.65
-+ importance 0.25
+词法相似度 0.55
++ importance 0.20
++ confidence 0.15
 + recency 0.10
++ preference 0.03
+
+近重复过滤
++ 最多 1200 字上下文预算
 ```
 
 记忆只进入软上下文，**不作为文档证据**，不参与 `[n]` 引用。
@@ -1178,15 +1192,18 @@ API：
 GET    /api/memories
 POST   /api/memories        {kind, content, subject?, predicate?, importance?}
 DELETE /api/memories/{id}
+POST   /api/memories/consolidate?expire_days=180
 ```
 
 Topbar「记忆」打开管理弹窗：
 
 - 按 fact / preference / task 筛选；
 - 显示来源会话、创建日期、命中次数；
-- 支持手动添加、硬删除。
+- 支持手动添加、硬删除；
+- 支持「整理」：合并近重复、归档低价值过期记忆；
+- 显示有效/归档数量与平均置信度。
 
-删除是硬删除；冲突槽位通过 `valid_to` / `superseded_by` 保留旧值审计。
+删除是硬删除；冲突槽位通过 `valid_from` / `valid_to` / `superseded_by` 保留版本审计。
 
 ### Token 级上下文预算
 
@@ -1489,7 +1506,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 90 项测试，全部通过。
+> 当前共 94 项测试，全部通过。
 
 ---
 

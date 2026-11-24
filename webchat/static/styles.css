@@ -1965,3 +1965,14 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
   .kb-doc-row .kb-doc-chunks { display: none; }
   .kb-docs-head, .kb-docs-toolbar, .kb-docs-body { padding-left: 14px; padding-right: 14px; }
 }
+
+/* ------------------------------------------------------- memory quality */
+.memory-consolidate {
+  height: 24px; margin-left: auto; padding: 0 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  color: var(--accent); font-size: 9px;
+}
+.memory-consolidate:hover { border-color: rgba(140,166,255,.4); background: var(--accent-soft); }
+.memory-consolidate:disabled { opacity: .45; }
+.memory-stats { margin: 0 0 8px; color: var(--faint); font-size: 8.5px; }
+.memory-filters .memory-count { margin-left: 0; }

@@ -2943,10 +2943,12 @@
           <button class="memory-filter" data-memory-filter="fact" type="button">事实</button>
           <button class="memory-filter" data-memory-filter="preference" type="button">偏好</button>
           <button class="memory-filter" data-memory-filter="task" type="button">任务</button>
+          <button class="memory-consolidate" type="button" data-memory-consolidate title="合并近重复并清理过期低价值记忆">整理</button>
           <span class="memory-count"></span>
         </div>
         <div class="memory-list"></div>
-        <p class="memory-hint">自动提取只识别明确表达：记住… / 我叫… / 我偏好… / 以后叫我…。删除是不可恢复的硬删除。</p>
+        <p class="memory-stats"></p>
+        <p class="memory-hint">自动提取只识别明确表达：记住… / 我叫… / 我偏好… / 以后叫我…；低置信度内容会被跳过。整理会合并近重复记忆。</p>
       </div>
     `;
     root.append(card);
@@ -2956,15 +2958,23 @@
 
     const listEl = card.querySelector(".memory-list");
     const countEl = card.querySelector(".memory-count");
+    const statsEl = card.querySelector(".memory-stats");
+    const consolidateBtn = card.querySelector("[data-memory-consolidate]");
     const form = card.querySelector(".memory-form");
     const input = form.querySelector("input");
     const kind = form.querySelector("select");
     let memories = [];
+    let stats = null;
     let filter = "all";
 
     function render() {
       const visible = filter === "all" ? memories : memories.filter((m) => m.kind === filter);
       countEl.textContent = `${visible.length} / ${memories.length}`;
+      if (statsEl) {
+        statsEl.textContent = stats
+          ? `有效 ${stats.active} 条 · 已归档 ${stats.superseded} 条 · 平均置信度 ${stats.avg_confidence}`
+          : "";
+      }
       if (!visible.length) {
         listEl.innerHTML = `<div class="memory-empty">还没有这类记忆。<br>可以直接在上方添加，或在对话里说“请记住……”</div>`;
         return;
@@ -2984,7 +2994,7 @@
               </button>
             </div>
             <p class="memory-content">${escapeHtml(memory.content)}</p>
-            <div class="memory-source">${source}${memory.hits ? ` · 已使用 ${memory.hits} 次` : ""}</div>
+            <div class="memory-source">${source}${memory.hits ? ` · 已使用 ${memory.hits} 次` : ""} · 置信度 ${Number(memory.confidence || 0).toFixed(2)}</div>
           </article>`;
       }).join("");
     }
@@ -2993,6 +3003,7 @@
       try {
         const data = await api("/api/memories");
         memories = data.memories || [];
+        stats = data.stats || null;
         render();
       } catch (err) {
         listEl.innerHTML = `<div class="memory-empty">${escapeHtml(err.message)}</div>`;
@@ -3016,6 +3027,7 @@
         });
         input.value = "";
         memories = data.memories || [];
+        stats = data.stats || null;
         render();
         toast(data.memory?.status === "duplicate" ? "这条记忆已经存在" : "已记住");
       } catch (err) {
@@ -3033,6 +3045,22 @@
         });
         render();
       });
+    });
+
+    consolidateBtn.addEventListener("click", async () => {
+      consolidateBtn.disabled = true;
+      try {
+        const data = await api("/api/memories/consolidate?expire_days=180", { method: "POST" });
+        memories = data.memories || [];
+        stats = data.stats || null;
+        render();
+        const result = data.result || {};
+        toast(`已整理：合并 ${result.merged || 0} 条，归档 ${result.expired || 0} 条`);
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        consolidateBtn.disabled = false;
+      }
     });
 
     listEl.addEventListener("click", async (event) => {

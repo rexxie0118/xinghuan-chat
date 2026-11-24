@@ -149,6 +149,9 @@ class ApiTest(unittest.TestCase):
             self.assertFalse(
                 any(m["id"] == memory["id"] for m in client.get("/api/memories").json()["memories"])
             )
+            consolidated = client.post("/api/memories/consolidate")
+            self.assertEqual(consolidated.status_code, 200)
+            self.assertIn("stats", consolidated.json())
 
     def test_cancel_endpoint_without_active_run(self):
         with TestClient(self.app) as client:

@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-22",
+      "title": "记忆质量：写入门槛、合并、预算与整理",
+      "date": "2026-11-24",
+      "summary": "低置信度跳过、近重复合并、valid_from 版本、召回预算与手动整理 API/UI。",
+      "record": "iterations/2026-11-24-22.html",
+      "diagrams": [
+        "architecture/2026-11-24-memory-quality.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-21",
       "title": "PPTX / Excel 解析依赖与入库",
       "date": "2026-11-24",
@@ -574,6 +584,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-office.svg",
       "note": "PPTX/XLSX/XLS 已支持，图片和扫描件仍不做 OCR。"
+    },
+    {
+      "id": "2026-11-24-v33",
+      "label": "v33 · Memory Quality",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-memory-quality.svg",
+      "note": "记忆写入质量、版本化、召回预算和整理已落地。"
     }
   ]
 }
