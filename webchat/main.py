@@ -34,6 +34,7 @@ from .agent_defs import (
     get_agent,
     list_agents,
     save_agent,
+    seed_department_agents,
 )
 from .github_importer import GitHubImportError, import_from_github
 from .jobs import RedisJobQueue, new_job
@@ -143,6 +144,11 @@ class ConnectorTestIn(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
+class AdminUserPatch(BaseModel):
+    role: Literal["admin", "manager", "member"] | None = None
+    department: str | None = Field(default=None, max_length=40)
+
+
 class JobIn(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
     mode: Literal["rag", "agent"] = "agent"
@@ -248,6 +254,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_dirs()
     init_db(settings.db_path)
+    seed_conn = connect(settings.db_path)
+    try:
+        seed_department_agents(seed_conn)
+    finally:
+        seed_conn.close()
 
     registry = KnowledgeRegistry(settings)
     sandbox = build_sandbox_runner(settings)
@@ -288,6 +299,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     try:
         if settings.seed_demo_users:
             _seed_demo_users(conn)
+        if settings.bootstrap_admin:
+            admin = repo.find_user_by_username(conn, settings.bootstrap_admin)
+            if admin is not None:
+                repo.update_user_role_department(
+                    conn,
+                    admin["id"],
+                    role="admin",
+                    department=admin["department"],
+                )
         repo.purge_expired_sessions(conn)
     finally:
         conn.close()
@@ -604,7 +624,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             service = resolve_kb(user, conversation["kb_id"])
             imported_agent = None
             if payload.agent_id and payload.mode == "agent":
-                imported_agent = get_agent(db, payload.agent_id, user["id"])
+                imported_agent = get_agent(db, payload.agent_id, user)
                 if imported_agent is None:
                     raise HTTPException(status_code=404, detail="Agent 不存在或不属于你")
             user_message = repo.add_message(
@@ -741,6 +761,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def metrics(user: dict[str, Any] = User) -> dict[str, Any]:
         return audit.metrics(user_id=user["id"])
 
+    def require_admin(user: dict[str, Any]) -> None:
+        if user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    @app.get("/api/admin/users")
+    def admin_users(user: dict[str, Any] = User) -> dict[str, Any]:
+        require_admin(user)
+        db = connect(settings.db_path)
+        try:
+            rows = db.execute("SELECT * FROM users ORDER BY department, username").fetchall()
+            return {"users": [repo.user_public(row) for row in rows]}
+        finally:
+            db.close()
+
+    @app.patch("/api/admin/users/{user_id}")
+    def admin_patch_user(
+        user_id: str, payload: AdminUserPatch, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        require_admin(user)
+        if payload.department and payload.department not in registry.departments:
+            raise HTTPException(status_code=400, detail="部门不存在")
+        db = connect(settings.db_path)
+        try:
+            target = repo.get_user(db, user_id)
+            if target is None:
+                raise HTTPException(status_code=404, detail="用户不存在")
+            repo.update_user_role_department(
+                db,
+                user_id,
+                role=payload.role or (target["role"] if "role" in target.keys() else "member"),
+                department=payload.department
+                or (target["department"] if "department" in target.keys() else "产品部"),
+            )
+            return {"user": repo.user_public(repo.get_user(db, user_id))}
+        finally:
+            db.close()
+
     # ------------------------------------------------------------- runtimes
 
     @app.get("/api/runtimes/me")
@@ -836,7 +893,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def agents(user: dict[str, Any] = User) -> dict[str, Any]:
         db = connect(settings.db_path)
         try:
-            return {"agents": list_agents(db, user["id"])}
+            return {"agents": list_agents(db, user)}
         finally:
             db.close()
 
@@ -921,7 +978,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         db = connect(settings.db_path)
         try:
-            agent = get_agent(db, agent_id, user["id"])
+            agent = get_agent(db, agent_id, user)
             if agent is None:
                 raise HTTPException(status_code=404, detail="Agent 不存在")
             if payload.entrypoint is None:
@@ -961,7 +1018,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, Any]:
         db = connect(settings.db_path)
         try:
-            agent = get_agent(db, agent_id, user["id"])
+            agent = get_agent(db, agent_id, user)
             if agent is None:
                 raise HTTPException(status_code=404, detail="Agent 不存在")
         finally:
@@ -1133,7 +1190,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, Any]:
         db = connect(settings.db_path)
         try:
-            data = agent_detail(db, agent_id, user["id"])
+            data = agent_detail(db, agent_id, user)
             if data is None:
                 raise HTTPException(status_code=404, detail="Agent 不存在")
             return {"agent": data}
@@ -1295,7 +1352,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 service = resolve_kb(user, conversation["kb_id"])
                 imported_agent = None
                 if payload.agent_id and payload.mode == "agent":
-                    imported_agent = get_agent(db, payload.agent_id, user["id"])
+                    imported_agent = get_agent(db, payload.agent_id, user)
                     if imported_agent is None:
                         raise HTTPException(status_code=404, detail="Agent 不存在或不属于你")
                 if (

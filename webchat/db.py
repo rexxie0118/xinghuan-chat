@@ -16,6 +16,7 @@ SCHEMA = [
         display_name  TEXT NOT NULL,
         password_hash TEXT NOT NULL,
         department    TEXT NOT NULL DEFAULT '产品部',
+        role          TEXT NOT NULL DEFAULT 'member',
         created_at    TEXT NOT NULL
     )
     """,
@@ -176,6 +177,23 @@ SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_audit_request ON audit_events(request_id)",
     "CREATE INDEX IF NOT EXISTS idx_audit_user_created ON audit_events(user_id, created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS department_agents (
+        id          TEXT PRIMARY KEY,
+        department  TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        markdown    TEXT NOT NULL,
+        entrypoint  TEXT NOT NULL DEFAULT '',
+        runtime     TEXT NOT NULL DEFAULT 'python',
+        timeout     REAL NOT NULL DEFAULT 10,
+        files_json  TEXT NOT NULL DEFAULT '[]',
+        created_at  TEXT NOT NULL,
+        kind        TEXT NOT NULL DEFAULT 'skill',
+        enabled     INTEGER NOT NULL DEFAULT 1
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_department_agents_dept ON department_agents(department, enabled)",
 ]
 
 
@@ -300,7 +318,10 @@ def init_db(path: Path | str) -> None:
             _ensure_columns(
                 conn,
                 "users",
-                {"department": "TEXT NOT NULL DEFAULT '产品部'"},
+                {
+                    "department": "TEXT NOT NULL DEFAULT '产品部'",
+                    "role": "TEXT NOT NULL DEFAULT 'member'",
+                },
             )
             _ensure_columns(
                 conn,

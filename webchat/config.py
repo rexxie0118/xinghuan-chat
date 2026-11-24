@@ -89,6 +89,7 @@ class Settings:
     max_queue: int = 32
     queue_timeout: float = 30.0
     run_timeout: float = 180.0
+    bootstrap_admin: str = ""
     queue_url: str = ""
     queue_name: str = "webchat:jobs"
     object_store: str = "local"
@@ -159,6 +160,7 @@ class Settings:
             max_queue=int(os.getenv("WEBCHAT_MAX_QUEUE", "32")),
             queue_timeout=float(os.getenv("WEBCHAT_QUEUE_TIMEOUT_SECONDS", "30")),
             run_timeout=float(os.getenv("WEBCHAT_RUN_TIMEOUT_SECONDS", "180")),
+            bootstrap_admin=(os.getenv("WEBCHAT_BOOTSTRAP_ADMIN") or "").strip(),
             queue_url=(os.getenv("WEBCHAT_QUEUE_URL") or "").strip(),
             queue_name=(os.getenv("WEBCHAT_QUEUE_NAME") or "webchat:jobs").strip(),
             object_store=(os.getenv("WEBCHAT_OBJECT_STORE") or "local").strip(),

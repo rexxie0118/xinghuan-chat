@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-18",
+      "title": "部门 RBAC 与默认 Agent/KB",
+      "date": "2026-11-24",
+      "summary": "users.role、部门默认 KB、department_agents 默认 Skill、admin 用户管理 API。",
+      "record": "iterations/2026-11-24-18.html",
+      "diagrams": [
+        "architecture/2026-11-24-rbac.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-17",
       "title": "内置 RAG / ImportedAgent / MCP 适配插件",
       "date": "2026-11-24",
@@ -506,6 +516,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-builtin-plugins.svg",
       "note": "RAG/ImportedAgent/MCP 已有 capability seam 和 core fallback。"
+    },
+    {
+      "id": "2026-11-24-v29",
+      "label": "v29 · Department RBAC",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-rbac.svg",
+      "note": "部门默认 KB/Agent 和 admin/manager/member 角色已落地。"
     }
   ]
 }

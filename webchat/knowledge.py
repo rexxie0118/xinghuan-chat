@@ -481,6 +481,9 @@ class KnowledgeRegistry:
         return [self.services[info.id] for info in self.infos]
 
     def for_user(self, user: dict[str, Any]) -> list[KnowledgeService]:
+        role = str(user.get("role") or "member")
+        if role == "admin":
+            return self.all()
         department = str(user.get("department") or self.default_department)
         return [
             svc
@@ -490,6 +493,13 @@ class KnowledgeRegistry:
 
     def default_for(self, user: dict[str, Any]) -> KnowledgeService | None:
         allowed = self.for_user(user)
+        department = str(user.get("department") or self.default_department)
+        for svc in allowed:
+            if svc.info.department == department:
+                return svc
+        for svc in allowed:
+            if svc.info.is_shared:
+                return svc
         return allowed[0] if allowed else None
 
     @staticmethod

@@ -18,6 +18,7 @@ def user_public(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
         "username": row["username"],
         "display_name": row["display_name"],
         "department": row["department"] if "department" in row.keys() else "产品部",
+        "role": row["role"] if "role" in row.keys() else "member",
         "created_at": row["created_at"],
     }
 
@@ -29,20 +30,22 @@ def create_user(
     display_name: str,
     password_hash: str,
     department: str = "产品部",
+    role: str = "member",
 ) -> dict[str, Any]:
     user_id = new_id("usr")
     created = iso()
     with conn:
         conn.execute(
-            "INSERT INTO users(id, username, display_name, password_hash, department, created_at)"
-            " VALUES(?,?,?,?,?,?)",
-            (user_id, username, display_name, password_hash, department, created),
+            "INSERT INTO users(id, username, display_name, password_hash, department, role, created_at)"
+            " VALUES(?,?,?,?,?,?,?)",
+            (user_id, username, display_name, password_hash, department, role, created),
         )
     return {
         "id": user_id,
         "username": username,
         "display_name": display_name,
         "department": department,
+        "role": role,
         "created_at": created,
     }
 
@@ -59,6 +62,16 @@ def set_user_department(conn: sqlite3.Connection, user_id: str, department: str)
     with conn:
         conn.execute(
             "UPDATE users SET department = ? WHERE id = ?", (department, user_id)
+        )
+
+
+def update_user_role_department(
+    conn: sqlite3.Connection, user_id: str, *, role: str, department: str
+) -> None:
+    with conn:
+        conn.execute(
+            "UPDATE users SET role=?, department=? WHERE id=?",
+            (role, department, user_id),
         )
 
 

@@ -508,6 +508,50 @@ GET /api/containers/pool
 
 ---
 
+## 4.2 部门 RBAC
+
+角色：
+
+```text
+admin    所有部门 KB/Agent；可管理用户部门/角色
+manager  本部门 KB/Agent
+member   本部门 KB/Agent
+```
+
+用户所属部门决定默认 KB：
+
+```text
+default_for(user)
+→ 优先 department 完全匹配的 KB
+→ 再回退 shared KB
+```
+
+默认部门 Agent 存在 `department_agents` 表：
+
+```text
+产品部 → 产品知识助手
+研发部 → 研发知识助手
+人事部 → 人事政策助手
+```
+
+- 普通用户只看到自己部门和 shared 的 Agent；
+- admin 看到全部；
+- 部门 Agent 是共享 Skill，不能按个人删除；
+- 个人 Agent 仍按 user_id 隔离。
+
+管理员初始化：
+
+```dotenv
+WEBCHAT_BOOTSTRAP_ADMIN=demo
+```
+
+管理 API：
+
+```http
+GET   /api/admin/users
+PATCH /api/admin/users/{id}   {role, department}
+```
+
 ## 4.3 可观测性与审计
 
 每个 API 响应带 `X-Request-ID`。客户端也可以传入自己的 request id。
@@ -1395,7 +1439,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 83 项测试，全部通过。
+> 当前共 85 项测试，全部通过。
 
 ---
 

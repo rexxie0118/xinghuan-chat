@@ -297,30 +297,6 @@ def save_agent(conn, record: dict[str, Any]) -> dict[str, Any]:
     ).public()
 
 
-def list_agents(conn, user_id: str) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        "SELECT * FROM agents WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
-    ).fetchall()
-    return [_public_from_row(row) for row in rows]
-
-
-def get_agent(conn, agent_id: str, user_id: str) -> ImportedAgent | None:
-    row = conn.execute(
-        "SELECT * FROM agents WHERE id = ? AND user_id = ?", (agent_id, user_id)
-    ).fetchone()
-    return row_to_agent(row) if row else None
-
-
-def agent_detail(conn, agent_id: str, user_id: str) -> dict[str, Any] | None:
-    agent = get_agent(conn, agent_id, user_id)
-    if agent is None:
-        return None
-    data = agent.public()
-    data["markdown"] = agent.markdown
-    data["file_contents"] = agent.files
-    return data
-
-
 def delete_agent(conn, agent_id: str, user_id: str) -> bool:
     with conn:
         cur = conn.execute(
@@ -336,3 +312,135 @@ def cited_indices(text: str, hit_count: int) -> list[int]:
         if 1 <= index <= hit_count and index not in found:
             found.append(index)
     return found
+
+
+DEFAULT_DEPARTMENT_AGENTS: dict[str, dict[str, Any]] = {
+    "产品部": {
+        "id": "dept_product",
+        "name": "产品知识助手",
+        "description": "面向产品部的需求、决策与知识库问答",
+        "markdown": "# 产品知识助手\n\n优先使用产品知识库与公共知识库回答；涉及需求、路线图和项目决策时，明确区分事实与建议。",
+    },
+    "研发部": {
+        "id": "dept_engineering",
+        "name": "研发知识助手",
+        "description": "面向研发部的架构、发布、告警与规范问答",
+        "markdown": "# 研发知识助手\n\n优先使用研发知识库与公共知识库回答；涉及发布、回滚和告警时，先确认环境与版本。",
+    },
+    "人事部": {
+        "id": "dept_hr",
+        "name": "人事政策助手",
+        "description": "面向人事部的假期、考勤、报销与制度问答",
+        "markdown": "# 人事政策助手\n\n优先使用人事知识库与公共知识库回答；涉及个人待遇或例外情况时，建议联系人事同事确认。",
+    },
+}
+
+
+def seed_department_agents(conn) -> None:
+    """Create one default prompt Skill per configured department."""
+    now = utcnow().isoformat(timespec="microseconds")
+    with conn:
+        for department, spec in DEFAULT_DEPARTMENT_AGENTS.items():
+            exists = conn.execute(
+                "SELECT id FROM department_agents WHERE id=?", (spec["id"],)
+            ).fetchone()
+            if exists is not None:
+                continue
+            conn.execute(
+                "INSERT INTO department_agents(id, department, name, description, markdown,"
+                " entrypoint, runtime, timeout, files_json, created_at, kind, enabled)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    spec["id"],
+                    department,
+                    spec["name"],
+                    spec["description"],
+                    spec["markdown"],
+                    "",
+                    "python",
+                    10,
+                    "[]",
+                    now,
+                    "skill",
+                    1,
+                ),
+            )
+
+
+def _department_agent(row) -> ImportedAgent:
+    return ImportedAgent(
+        id=row["id"],
+        user_id=f"department:{row['department']}",
+        name=row["name"],
+        description=row["description"],
+        markdown=row["markdown"],
+        entrypoint=row["entrypoint"],
+        runtime=row["runtime"],
+        timeout=float(row["timeout"]),
+        files=load_json(row["files_json"], []),
+        created_at=row["created_at"],
+        kind=row["kind"],
+    )
+
+
+def list_agents(conn, user: dict[str, Any]) -> list[dict[str, Any]]:
+    user_id = user["id"]
+    department = str(user.get("department") or "")
+    role = str(user.get("role") or "member")
+    rows = conn.execute(
+        "SELECT * FROM agents WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
+    ).fetchall()
+    out = []
+    for row in rows:
+        item = _public_from_row(row)
+        item.update({"scope": "personal", "department": department})
+        out.append(item)
+    clauses = ["enabled=1"]
+    params: list[Any] = []
+    if role != "admin":
+        clauses.append("department=?")
+        params.append(department)
+    dept_rows = conn.execute(
+        "SELECT * FROM department_agents WHERE " + " AND ".join(clauses)
+        + " ORDER BY department, name",
+        tuple(params),
+    ).fetchall()
+    for row in dept_rows:
+        item = _department_agent(row).public()
+        item.update({"scope": "department", "department": row["department"]})
+        out.append(item)
+    return out
+
+
+def get_agent(conn, agent_id: str, user: dict[str, Any]) -> ImportedAgent | None:
+    user_id = user["id"]
+    role = str(user.get("role") or "member")
+    department = str(user.get("department") or "")
+    row = conn.execute(
+        "SELECT * FROM agents WHERE id = ? AND user_id = ?", (agent_id, user_id)
+    ).fetchone()
+    if row is not None:
+        return row_to_agent(row)
+    dept_row = conn.execute(
+        "SELECT * FROM department_agents WHERE id=? AND enabled=1", (agent_id,)
+    ).fetchone()
+    if dept_row is None:
+        return None
+    if role != "admin" and dept_row["department"] != department:
+        return None
+    return _department_agent(dept_row)
+
+
+def agent_detail(conn, agent_id: str, user: dict[str, Any]) -> dict[str, Any] | None:
+    agent = get_agent(conn, agent_id, user)
+    if agent is None:
+        return None
+    data = agent.public()
+    data["markdown"] = agent.markdown
+    data["file_contents"] = agent.files
+    if agent.user_id.startswith("department:"):
+        data["scope"] = "department"
+        data["department"] = agent.user_id.split(":", 1)[1]
+    else:
+        data["scope"] = "personal"
+    return data

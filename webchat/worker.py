@@ -77,7 +77,7 @@ class Worker:
             imported_agent = None
             agent_id = str(job.payload.get("agent_id") or "")
             if agent_id:
-                imported_agent = get_agent(db, agent_id, job.user_id)
+                imported_agent = get_agent(db, agent_id, user)
                 if imported_agent is None:
                     self.queue.fail(job, "Agent 不存在")
                     return
