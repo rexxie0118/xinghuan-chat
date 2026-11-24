@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-30",
+      "title": "Redis 实例与异步 Worker 队列",
+      "date": "2026-11-24",
+      "summary": "安装 Redis 8.12；Web 入队 Worker 消费；真实 queued→completed；修复 BRPOP timeout。",
+      "record": "iterations/2026-11-24-30.html",
+      "diagrams": [
+        "architecture/2026-11-24-redis-worker.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-29",
       "title": "SQLite → PostgreSQL 全量迁移",
       "date": "2026-11-24",
@@ -710,6 +720,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-postgres-migration.svg",
       "note": "控制面全量迁移已在本机 PostgreSQL 16 验证；KB 仍为 SQLite。"
+    },
+    {
+      "id": "2026-11-24-v41",
+      "label": "v41 · Redis Worker",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-redis-worker.svg",
+      "note": "Redis queue + Worker 已实测；无 retry/DLQ/lease。"
     }
   ]
 }

@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from webchat.db import _pg_sql
-from webchat.jobs import InMemoryJobQueue, new_job
+from webchat.jobs import InMemoryJobQueue, RedisJobQueue, new_job
 from webchat.object_store import build_artifact_store
 
 
@@ -29,6 +29,17 @@ class InfraTest(unittest.TestCase):
         queue.complete(job, {"message_id": "m1"})
         self.assertEqual(queue.get(job.id).status, "completed")
         self.assertEqual(queue.get(job.id).result["message_id"], "m1")
+
+    def test_redis_dequeue_timeout_is_idle_poll(self):
+        class FakeRedis:
+            def brpop(self, *_args, **_kwargs):
+                raise TimeoutError("idle")
+
+        queue = object.__new__(RedisJobQueue)
+        queue.redis = FakeRedis()
+        queue.ready = "webchat:jobs:ready"
+        queue._redis_errors = (TimeoutError,)
+        self.assertIsNone(queue.dequeue(timeout=1))
 
     def test_local_artifact_store_factory(self):
         tmp = Path(tempfile.mkdtemp(prefix="object-test-"))

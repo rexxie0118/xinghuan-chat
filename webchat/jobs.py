@@ -103,7 +103,13 @@ class RedisJobQueue(JobQueue):
             import redis
         except ImportError as exc:  # pragma: no cover - optional infra
             raise RuntimeError("Redis 队列需要安装 redis") from exc
-        self.redis = redis.Redis.from_url(url, decode_responses=True)
+        self.redis = redis.Redis.from_url(
+            url,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_timeout=15,
+        )
+        self._redis_errors = (redis.exceptions.TimeoutError, redis.exceptions.ConnectionError)
         self.name = name
         self.ready = f"{name}:ready"
         self.key = f"{name}:job"
@@ -129,7 +135,12 @@ class RedisJobQueue(JobQueue):
         pipe.execute()
 
     def dequeue(self, timeout: int = 5) -> Job | None:
-        item = self.redis.brpop(self.ready, timeout=timeout)
+        try:
+            item = self.redis.brpop(self.ready, timeout=timeout)
+        except self._redis_errors:
+            # Blocking pop can race the client-side socket timeout. Treat it as
+            # an idle poll; the next loop iteration reconnects if needed.
+            return None
         if not item:
             return None
         job_id = item[1]
