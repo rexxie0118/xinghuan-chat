@@ -3,6 +3,16 @@
   "updated_at": "2026-11-23",
   "iterations": [
     {
+      "id": "2026-11-23-12",
+      "title": "并发准入、队列与背压",
+      "date": "2026-11-23",
+      "summary": "新增 ConcurrencyGate：全局/用户 semaphore、有限队列、429 背压、run timeout 和 lease 释放。",
+      "record": "iterations/2026-11-23-12.html",
+      "diagrams": [
+        "architecture/2026-11-23-concurrency-gate.svg"
+      ]
+    },
+    {
       "id": "2026-11-23-11",
       "title": "记忆 UI 入口修复",
       "date": "2026-11-23",
@@ -207,6 +217,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-memory-ui.svg",
       "note": "记忆管理 UI 已落地；自动提取规则未变。"
+    },
+    {
+      "id": "2026-11-23-v12",
+      "label": "v12 · ConcurrencyGate",
+      "date": "2026-11-23",
+      "src": "architecture/2026-11-23-concurrency-gate.svg",
+      "note": "单进程内有界并发、背压与超时已落地；跨进程 Worker 仍待做。"
     }
   ]
 }

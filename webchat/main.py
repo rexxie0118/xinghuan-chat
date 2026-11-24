@@ -17,6 +17,7 @@ from urllib.parse import quote, urlparse
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
 from . import repository as repo
@@ -31,6 +32,7 @@ from .agent_defs import (
     save_agent,
 )
 from .github_importer import GitHubImportError, import_from_github
+from .concurrency import ConcurrencyGate, QueueFullError, QueueTimeoutError
 from .config import Settings
 from .db import connect, init_db
 from .knowledge import KnowledgeRegistry, KnowledgeService
@@ -223,6 +225,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     container_runtime = AppleContainerRuntime(settings)
     workspace_service = ContainerWorkspaceService(settings, container_runtime)
     active_runs = ActiveRuns()
+    gate = ConcurrencyGate(
+        max_concurrent=settings.max_concurrent_runs,
+        max_per_user=settings.max_user_runs,
+        max_queue=settings.max_queue,
+        queue_timeout=settings.queue_timeout,
+        run_timeout=settings.run_timeout,
+    )
     tools = build_tool_registry(settings)
     memory_store = UserMemoryService(settings.db_path)
     runner = AgentRunner(settings, sandbox, tools, memory_store=memory_store)
@@ -285,6 +294,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.container_runtime = container_runtime
     app.state.workspace_service = workspace_service
     app.state.active_runs = active_runs
+    app.state.gate = gate
     app.state.user_memory = memory_store
     app.state.runner = runner
     app.state.kernel = kernel
@@ -377,6 +387,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "knowledge_bases": registry.catalog_public(),
             "tools": tools.summary(),
             "plugins": plugin_host.summary(),
+            "concurrency": gate.metrics().public(),
             "kb": {
                 "provider": default_service.provider.kind,
                 "chat_model": getattr(
@@ -1027,56 +1038,74 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         content = payload.content.strip()
         if not content:
             raise HTTPException(status_code=400, detail="消息不能为空")
-        db = connect(settings.db_path)
         try:
-            conversation = repo.get_conversation(
-                db, conversation_id=conversation_id, user_id=user["id"]
-            )
-            if conversation is None:
-                raise HTTPException(status_code=404, detail="会话不存在")
-            service = resolve_kb(user, conversation["kb_id"])
-            imported_agent = None
-            if payload.agent_id and payload.mode == "agent":
-                imported_agent = get_agent(db, payload.agent_id, user["id"])
-                if imported_agent is None:
-                    raise HTTPException(status_code=404, detail="Agent 不存在或不属于你")
-            if (
-                imported_agent is not None
-                and settings.sandbox.startswith("apple")
-                and settings.runtime_auto_ensure
-            ):
-                try:
-                    workspace_service.ensure_workspace(user["id"], conversation_id)
-                except Exception as exc:  # noqa: BLE001 - runtime is optional
-                    LOG.warning("container workspace ensure failed: %s", exc)
-            history = repo.conversation_context(
-                db, conversation_id=conversation_id, user_id=user["id"], limit=8
-            )
-            user_message = repo.add_message(
-                db,
-                conversation_id=conversation_id,
-                user_id=user["id"],
-                role="user",
-                content=content,
-                meta={"mode": payload.mode, "agent_id": payload.agent_id},
-            )
-            title = repo.auto_title_if_needed(
-                db,
-                conversation_id=conversation_id,
-                user_id=user["id"],
-                first_user_text=content,
-            )
+            lease = await gate.acquire(user["id"])
+        except QueueFullError as exc:
+            raise HTTPException(
+                status_code=429,
+                detail=f"当前请求排队已满，请稍后再试（{exc}）",
+                headers={"Retry-After": "1"},
+            ) from exc
+        except QueueTimeoutError as exc:
+            raise HTTPException(
+                status_code=429,
+                detail="当前请求排队超时，请稍后再试",
+                headers={"Retry-After": "3"},
+            ) from exc
+        try:
+            db = connect(settings.db_path)
             try:
-                memory_store.extract_and_remember(
-                    user["id"],
-                    content,
-                    conversation_id=conversation_id,
-                    message_id=user_message["id"],
+                conversation = repo.get_conversation(
+                    db, conversation_id=conversation_id, user_id=user["id"]
                 )
-            except Exception as exc:  # noqa: BLE001 - memory is optional
-                LOG.warning("memory extract failed: %s", exc)
-        finally:
-            db.close()
+                if conversation is None:
+                    raise HTTPException(status_code=404, detail="会话不存在")
+                service = resolve_kb(user, conversation["kb_id"])
+                imported_agent = None
+                if payload.agent_id and payload.mode == "agent":
+                    imported_agent = get_agent(db, payload.agent_id, user["id"])
+                    if imported_agent is None:
+                        raise HTTPException(status_code=404, detail="Agent 不存在或不属于你")
+                if (
+                    imported_agent is not None
+                    and settings.sandbox.startswith("apple")
+                    and settings.runtime_auto_ensure
+                ):
+                    try:
+                        workspace_service.ensure_workspace(user["id"], conversation_id)
+                    except Exception as exc:  # noqa: BLE001 - runtime is optional
+                        LOG.warning("container workspace ensure failed: %s", exc)
+                history = repo.conversation_context(
+                    db, conversation_id=conversation_id, user_id=user["id"], limit=8
+                )
+                user_message = repo.add_message(
+                    db,
+                    conversation_id=conversation_id,
+                    user_id=user["id"],
+                    role="user",
+                    content=content,
+                    meta={"mode": payload.mode, "agent_id": payload.agent_id},
+                )
+                title = repo.auto_title_if_needed(
+                    db,
+                    conversation_id=conversation_id,
+                    user_id=user["id"],
+                    first_user_text=content,
+                )
+                try:
+                    memory_store.extract_and_remember(
+                        user["id"],
+                        content,
+                        conversation_id=conversation_id,
+                        message_id=user_message["id"],
+                    )
+                except Exception as exc:  # noqa: BLE001 - memory is optional
+                    LOG.warning("memory extract failed: %s", exc)
+            finally:
+                db.close()
+        except Exception:
+            lease.release()
+            raise
 
         async def event_stream() -> AsyncIterator[str]:
             queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
@@ -1164,14 +1193,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 conversation_id=conversation_id,
                                 user_id=user["id"],
                                 role="assistant",
-                                content="本次生成已取消。",
+                                content=str(exc) or "本次生成已取消。",
                                 meta={
                                     "mode": payload.mode,
                                     "engine": "local",
                                     "answer_mode": "cancelled",
                                     "failure": {"kind": "cancelled", "retryable": False},
                                     "trace": [],
-                                    "warnings": ["本次生成已取消"],
+                                    "warnings": [str(exc) or "本次生成已取消"],
                                 },
                             )
                         finally:
@@ -1207,10 +1236,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     except Exception:  # noqa: BLE001
                         emit("error", {"detail": "回答生成失败"})
                 finally:
+                    lease.release()
                     active_runs.finish(conversation_id, cancel_token)
                     emit("__end__", None)
 
             task = asyncio.create_task(asyncio.to_thread(work))
+
+            async def timeout_guard() -> None:
+                try:
+                    await asyncio.sleep(gate.run_timeout)
+                except asyncio.CancelledError:
+                    return
+                if task.done():
+                    return
+                cancel_token.cancel("本次生成超过运行时限，已取消")
+                emit("status", {"title": "运行超时", "detail": "正在停止本次生成"})
+
+            watchdog = asyncio.create_task(timeout_guard())
             yield _sse(
                 "meta",
                 {
@@ -1236,6 +1278,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         yield _sse("done", data)
                 else:
                     yield _sse(event, data)
+            watchdog.cancel()
             if not disconnected:
                 try:
                     await asyncio.wait_for(task, timeout=1)
@@ -1253,6 +1296,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
             },
+            background=BackgroundTask(lease.release),
         )
 
     # ------------------------------------------------------------ knowledge

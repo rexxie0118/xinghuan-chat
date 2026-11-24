@@ -80,6 +80,11 @@ class Settings:
     tool_max_steps: int = 4
     context_max_tokens: int = 12000
     context_reserve_tokens: int = 1200
+    max_concurrent_runs: int = 4
+    max_user_runs: int = 1
+    max_queue: int = 32
+    queue_timeout: float = 30.0
+    run_timeout: float = 180.0
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -134,6 +139,11 @@ class Settings:
             tool_max_steps=int(os.getenv("WEBCHAT_TOOL_MAX_STEPS", "4")),
             context_max_tokens=int(os.getenv("WEBCHAT_CONTEXT_MAX_TOKENS", "12000")),
             context_reserve_tokens=int(os.getenv("WEBCHAT_CONTEXT_RESERVE_TOKENS", "1200")),
+            max_concurrent_runs=int(os.getenv("WEBCHAT_MAX_CONCURRENT_RUNS", "4")),
+            max_user_runs=int(os.getenv("WEBCHAT_MAX_USER_RUNS", "1")),
+            max_queue=int(os.getenv("WEBCHAT_MAX_QUEUE", "32")),
+            queue_timeout=float(os.getenv("WEBCHAT_QUEUE_TIMEOUT_SECONDS", "30")),
+            run_timeout=float(os.getenv("WEBCHAT_RUN_TIMEOUT_SECONDS", "180")),
         )
         settings.ensure_dirs()
         return settings

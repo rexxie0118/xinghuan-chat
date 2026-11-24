@@ -1,0 +1,118 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-23-12</div>
+    <h1>并发准入、队列与背压</h1>
+    <p class="lede">
+      新增 ConcurrencyGate：全局/用户 semaphore、有限等待队列、429 背压、
+      run watchdog 超时取消和 gate lease；每个聊天请求都经过准入控制。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：53 项通过</span>
+      <span>架构：v12</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>本迭代完成</h2>
+    <div class="change-grid">
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Admission</h3>
+        <p>全局 4 槽、每用户 1 槽；请求先排队，再写 user message。</p>
+        <code>ConcurrencyGate</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Backpressure</h3>
+        <p>队列满或排队超时返回 429 + Retry-After，避免无限堆积。</p>
+        <code>QueueFullError</code>
+      </div>
+      <div class="change-card">
+        <span class="tag done">DONE</span>
+        <h3>Timeout + Lease</h3>
+        <p>run watchdog 到点取消 token；lease 在 worker/响应结束时释放。</p>
+        <code>gate.run_timeout</code>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>默认参数</h2>
+    <pre class="record-pre">WEBCHAT_MAX_CONCURRENT_RUNS=4
+WEBCHAT_MAX_USER_RUNS=1
+WEBCHAT_MAX_QUEUE=32
+WEBCHAT_QUEUE_TIMEOUT_SECONDS=30
+WEBCHAT_RUN_TIMEOUT_SECONDS=180</pre>
+  </section>
+
+  <section>
+    <h2>行为</h2>
+    <ul>
+      <li>队列满 → HTTP 429，客户端退避后重试；</li>
+      <li>排队超时 → HTTP 429；</li>
+      <li>运行超时 → token 取消，worker 保存 cancelled 消息；</li>
+      <li>客户端断开 → worker 继续保存，lease 在 worker 结束释放；</li>
+      <li><code>/api/meta.concurrency</code> 暴露 active / waiting / limits。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>这是单进程内的并发控制，不是跨节点队列。</li>
+      <li><code>asyncio.to_thread</code> 线程无法被强制杀死，超时是协作式取消。</li>
+      <li>多 Worker / Postgres / Redis 队列仍在后续 Todo。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-23-concurrency-gate.svg" alt="v12 concurrency gate" />
+      <figcaption>v12：请求 → ConcurrencyGate → worker；满队列 429，运行超时取消。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">16 项完成，11 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>将单进程 gate 升级为跨进程队列：Postgres 持久化、Redis/Queue Worker、对象存储。</p>
+  </section>
+</article>

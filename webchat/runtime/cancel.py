@@ -11,17 +11,20 @@ from .failures import RunCancelled
 class CancellationToken:
     def __init__(self) -> None:
         self._event = threading.Event()
+        self._reason = ""
 
     @property
     def cancelled(self) -> bool:
         return self._event.is_set()
 
-    def cancel(self) -> None:
+    def cancel(self, reason: str = "") -> None:
+        if reason:
+            self._reason = reason
         self._event.set()
 
     def check(self) -> None:
         if self._event.is_set():
-            raise RunCancelled("本次生成已取消")
+            raise RunCancelled(self._reason or "本次生成已取消")
 
     def on_cancel(self, callback: Callable[[], None]) -> None:
         """Best-effort callback support; the token itself stays thread-safe."""
@@ -47,12 +50,12 @@ class ActiveRuns:
             self._runs[key] = token
             return token
 
-    def cancel(self, key: str) -> bool:
+    def cancel(self, key: str, reason: str = "") -> bool:
         with self._lock:
             token = self._runs.get(key)
             if token is None:
                 return False
-            token.cancel()
+            token.cancel(reason)
             return True
 
     def finish(self, key: str, token: CancellationToken) -> None:

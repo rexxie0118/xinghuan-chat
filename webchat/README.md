@@ -720,6 +720,28 @@ webchat/docs/architecture/<date>-*.svg    当前架构图
 
 规则见 [`webchat/docs/README.md`](docs/README.md)。
 
+### 并发准入与背压
+
+内容入口现在经过 `ConcurrencyGate`：
+
+```text
+全局 semaphore   WEBCHAT_MAX_CONCURRENT_RUNS=4
+每用户 semaphore WEBCHAT_MAX_USER_RUNS=1
+等待队列         WEBCHAT_MAX_QUEUE=32
+排队超时         WEBCHAT_QUEUE_TIMEOUT_SECONDS=30
+运行时限         WEBCHAT_RUN_TIMEOUT_SECONDS=180
+```
+
+行为：
+
+- 队列满 → HTTP `429` + `Retry-After`
+- 排队超时 → HTTP `429`
+- 运行超时 → 取消 token，生成一条 cancelled 消息
+- 客户端断开 → worker 继续保存消息；gate lease 在 worker 结束时释放
+- `/api/meta` 返回 `concurrency` 指标
+
+核心文件：[concurrency.py](webchat/concurrency.py)。
+
 ### 用户级长期记忆
 
 存储：
@@ -957,9 +979,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI + 静态资源缓存修正。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列。
 
-> 当前共 50 项测试，全部通过。
+> 当前共 53 项测试，全部通过。
 
 ---
 
