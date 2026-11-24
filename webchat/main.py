@@ -46,6 +46,7 @@ from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
 from .sandbox.apple_pool import AppleContainerPool
 from .container_workspaces import ContainerWorkspaceService, RuntimeReaper
 from .tools import ToolError, build_tool_registry
+from .websearch import register_web_tools
 from .user_memory import UserMemoryService
 from .runtime.cancel import ActiveRuns
 from .runtime.failures import RunCancelled, classify_exception
@@ -261,6 +262,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run_timeout=settings.run_timeout,
     )
     tools = build_tool_registry(settings)
+    register_web_tools(tools, settings)
     connector_service = ConnectorService(settings, tools)
     try:
         connector_service.load_approved()

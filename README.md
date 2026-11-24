@@ -45,6 +45,7 @@ python3 -m venv .venv
 - MCP 连接池/分片：round-robin + failover
 - 声明式联网连接器：校验/审批/测试后注册 Tool
 - Chat 联网开关：按需进入 Tool Loop
+- Web Research：search / fetch / source rank / conflict detect
 - Apple Container 预热池：warm/lease/quota
 - 页面内 Docs：迭代记录、Todo、历史架构图
 - Agent 模式执行脚本，展示 stdout / stderr / exit code / 工具轨迹

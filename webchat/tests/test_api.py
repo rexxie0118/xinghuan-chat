@@ -79,7 +79,10 @@ class ApiTest(unittest.TestCase):
             resp = client.get("/api/tools")
             self.assertEqual(resp.status_code, 200)
             self.assertFalse(resp.json()["enabled"])
-            self.assertEqual(resp.json()["tools"], [])
+            names = [item["name"] for item in resp.json()["tools"]]
+            self.assertIn("web.search", names)
+            self.assertIn("web.fetch", names)
+            self.assertIn("web.research", names)
             bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
             self.assertEqual(bad.status_code, 400)
 

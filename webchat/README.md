@@ -987,6 +987,52 @@ Tool Loop 中：
 
 严格 RAG prompt 使用 `answer.max_context_tokens`（默认 7000）；超出后压缩证据并过滤已删除的引用编号。
 
+### Web Research 工具链
+
+新增内置工具：
+
+```text
+web.search    搜索公开网页
+web.fetch     抓取一个 HTTPS 页面正文
+web.research  搜索 + 抓取 + 来源评分 + 冲突检测
+```
+
+搜索 provider：
+
+```dotenv
+# 二选一
+TAVILY_API_KEY=
+WEBCHAT_SEARXNG_URL=http://127.0.0.1:8888
+# 可选 host allowlist
+WEBCHAT_WEB_ALLOW_HOSTS=
+```
+
+没有配置 provider 时，`web.search` / `web.research` 会返回明确的配置错误；`web.fetch` 仍可用于已选定的 HTTPS URL。
+
+安全：
+
+- 只允许 HTTPS；
+- 默认拒绝私有/本地/保留地址；
+- 显式 `WEBCHAT_WEB_ALLOW_HOSTS` 时按 allowlist 信任；
+- 禁止重定向；
+- 最大响应 512KB；
+- 正文最多 12000 字符；
+- 结果包含标题、URL、发布时间、domain、tier、trust_score。
+
+来源评分：
+
+```text
+official / gov / edu / primary docs
+> trusted media
+> general web
+> known low-quality
+```
+
+冲突检测：
+
+- 对相同主题、数字不同的句子标记 `conflict`；
+- 返回 `details`，让回答层展示分歧，而不是强行合并。
+
 ### Chat 模式联网开关
 
 Chat 模式下，输入框左侧有「联网」按钮。打开后请求体带：

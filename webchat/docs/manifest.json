@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-08",
+      "title": "Web Research 工具链",
+      "date": "2026-11-24",
+      "summary": "新增 web.search / web.fetch / web.research，做受控抓取、来源评分和启发式冲突检测。",
+      "record": "iterations/2026-11-24-08.html",
+      "diagrams": [
+        "architecture/2026-11-24-web-research.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-07",
       "title": "Chat 模式联网开关",
       "date": "2026-11-24",
@@ -336,6 +346,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-chat-live.svg",
       "note": "Chat 联网开关已落地；外部来源引用仍待统一。"
+    },
+    {
+      "id": "2026-11-24-v19",
+      "label": "v19 · Web Research",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-web-research.svg",
+      "note": "搜索/抓取/评分/冲突检测已落地；需要配置 Tavily 或 SearXNG。"
     }
   ]
 }
