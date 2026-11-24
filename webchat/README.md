@@ -1161,10 +1161,22 @@ queued → completed
 
 实现边界：
 
-- Redis list + job hash，7 天 TTL；
-- 已在 `dequeue` 处理 BRPOP 与客户端 socket timeout 的竞态；
-- 还没有 retry / 死信 / running lease 回收；
-- 单 Worker 已完成实测，多 Worker 仍需验证。
+- ready / processing / dead 三个列表；
+- job hash 7 天 TTL；
+- `BLMOVE` 进入 processing 并设置 lease；
+- 失败按 attempts/max_retries 重试；
+- 超过上限进入 dead-letter；
+- `requeue_expired` 回收 lease 过期任务；
+- 已处理 BRPOP/BLMOVE 与客户端 socket timeout 的竞态。
+
+配置：
+
+```dotenv
+WEBCHAT_JOB_MAX_RETRIES=3
+WEBCHAT_JOB_LEASE_SECONDS=600
+```
+
+当前限额：多 Worker 尚未压测；任务不是 exactly-once。
 
 ### 本地 PostgreSQL 实例
 
@@ -1769,7 +1781,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 116 项测试，全部通过。
+> 当前共 118 项测试，全部通过。
 
 ---
 

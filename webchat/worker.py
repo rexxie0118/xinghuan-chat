@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import signal
 import sys
 import time
@@ -140,15 +141,21 @@ def main() -> int:
     if not url:
         print("WEBCHAT_QUEUE_URL is required", file=sys.stderr)
         return 2
-    queue = RedisJobQueue(url, name=os.getenv("WEBCHAT_QUEUE_NAME", "webchat:jobs"))
+    queue = RedisJobQueue(
+        url,
+        name=os.getenv("WEBCHAT_QUEUE_NAME", "webchat:jobs"),
+        lease_seconds=int(os.getenv("WEBCHAT_JOB_LEASE_SECONDS", "600")),
+    )
     worker = Worker(settings, queue)
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
-    LOG.info("worker started")
+    worker_id = os.getenv("WEBCHAT_WORKER_ID") or f"{socket.gethostname()}:{os.getpid()}"
+    LOG.info("worker started: %s", worker_id)
     while not _stop:
-        job = queue.dequeue(timeout=5)
+        job = queue.dequeue(timeout=5, worker_id=worker_id)
         if job is None:
             continue
+        LOG.info("processing job %s attempt=%s", job.id, job.attempts)
         worker.process(job)
     queue.close()
     LOG.info("worker stopped")

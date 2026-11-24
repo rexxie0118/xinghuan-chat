@@ -533,7 +533,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "tools": tools.summary(),
             "plugins": plugin_host.summary(),
             "concurrency": gate.metrics().public(),
-            "queue": {"enabled": job_queue is not None, "name": settings.queue_name},
+            "queue": {
+                "enabled": job_queue is not None,
+                "name": settings.queue_name,
+                **((job_queue.metrics() if hasattr(job_queue, "metrics") else {}) or {}),
+            },
             "apple_pool": container_pool.status() if container_pool is not None else {"enabled": False},
             "kb": {
                 "provider": default_service.provider.kind,

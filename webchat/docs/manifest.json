@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-31",
+      "title": "队列可靠性：lease / retry / DLQ",
+      "date": "2026-11-24",
+      "summary": "processing 列表、lease 回收、attempts 重试、dead-letter、队列指标。",
+      "record": "iterations/2026-11-24-31.html",
+      "diagrams": [
+        "architecture/2026-11-24-queue-reliability.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-30",
       "title": "Redis 实例与异步 Worker 队列",
       "date": "2026-11-24",
@@ -727,6 +737,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-redis-worker.svg",
       "note": "Redis queue + Worker 已实测；无 retry/DLQ/lease。"
+    },
+    {
+      "id": "2026-11-24-v42",
+      "label": "v42 · Queue Reliability",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-queue-reliability.svg",
+      "note": "lease/retry/DLQ 已落地；非 exactly-once，多 Worker 未压测。"
     }
   ]
 }
