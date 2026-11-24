@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-27",
+      "title": "团队 / 多 Agent 记忆",
+      "date": "2026-11-24",
+      "summary": "成员提交共享 pending；角色过滤视图；pending 不提前覆盖；admin/manager authority 冲突解决。",
+      "record": "iterations/2026-11-24-27.html",
+      "diagrams": [
+        "architecture/2026-11-24-team-memory.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-26",
       "title": "语义合并：LLM 判定同义记忆",
       "date": "2026-11-24",
@@ -659,6 +669,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-memory-semantic.svg",
       "note": "LLM 语义去重已落地；默认关闭，需 WEBCHAT_MEMORY_SEMANTIC=llm。"
+    },
+    {
+      "id": "2026-11-24-v38",
+      "label": "v38 · Team Memory",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-team-memory.svg",
+      "note": "团队共享记忆、审批和 authority 冲突已落地；无独立团队管理页。"
     }
   ]
 }

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from webchat import repository as repo
 from webchat.db import connect, init_db
-from webchat.user_memory import UserMemoryService, extract_candidates
+from webchat.user_memory import MemoryConflict, UserMemoryService, extract_candidates
 
 
 class UserMemoryTest(unittest.TestCase):
@@ -230,6 +230,40 @@ class UserMemoryTest(unittest.TestCase):
         self.assertEqual(second["id"], first["id"])
         self.assertTrue(judge.calls)
         self.assertEqual(len(service.list(self.user["id"])), 1)
+
+    def test_pending_does_not_supersede_active(self):
+        conn = connect(self.db)
+        try:
+            admin = repo.create_user(
+                conn, username="admin2", display_name="Admin", password_hash="x",
+                role="admin",
+            )
+            manager = repo.create_user(
+                conn, username="manager3", display_name="Manager", password_hash="x",
+                department="产品部", role="manager",
+            )
+        finally:
+            conn.close()
+        admin_user = repo.user_public(admin)
+        manager_user = repo.user_public(manager)
+        current = self.service.remember(
+            self.user["id"], kind="fact", content="负责人是张三",
+            subject="项目", predicate="负责人", object_text="张三",
+            scope="department", scope_id="产品部",
+        )
+        self.service.approve(current["id"], approver=admin["id"], user=admin_user)
+        pending = self.service.remember(
+            self.user["id"], kind="fact", content="负责人是李四",
+            subject="项目", predicate="负责人", object_text="李四",
+            scope="department", scope_id="产品部",
+        )
+        before = self.service.recall(
+            self.user["id"], "负责人", user=repo.user_public(self.user)
+        )
+        self.assertTrue(any(item["id"] == current["id"] for item in before))
+        self.assertFalse(any(item["id"] == pending["id"] for item in before))
+        with self.assertRaises(MemoryConflict):
+            self.service.approve(pending["id"], approver=manager["id"], user=manager_user)
 
     def test_slot_supersede_and_forget(self):
         self.service.remember(

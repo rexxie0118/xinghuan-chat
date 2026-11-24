@@ -2966,6 +2966,8 @@
           <button class="memory-filter" data-memory-filter="preference" type="button">偏好</button>
           <button class="memory-filter" data-memory-filter="task" type="button">任务</button>
           <button class="memory-filter" data-memory-filter="pending" type="button">待审批</button>
+          <button class="memory-filter" data-memory-filter="department" type="button">部门共享</button>
+          <button class="memory-filter" data-memory-filter="org" type="button">全公司</button>
           <button class="memory-consolidate" type="button" data-memory-consolidate title="合并近重复并清理过期低价值记忆">整理</button>
           <button class="memory-consolidate" type="button" data-memory-undo title="撤销最近一次记忆删除">撤销删除</button>
           <span class="memory-count"></span>
@@ -2998,7 +3000,9 @@
         ? memories
         : filter === "pending"
           ? memories.filter((m) => m.status === "pending")
-          : memories.filter((m) => m.kind === filter);
+          : filter === "department" || filter === "org"
+            ? memories.filter((m) => m.scope === filter)
+            : memories.filter((m) => m.kind === filter);
       countEl.textContent = `${visible.length} / ${memories.length}`;
       if (statsEl) {
         statsEl.textContent = stats

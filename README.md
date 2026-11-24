@@ -57,6 +57,7 @@ python3 -m venv .venv
 - 共享记忆审批、审计回滚、后台整理任务
 - 记忆评测：约束/过期/范围/审批/来源/回滚
 - 语义合并：LLM 判定同义记忆
+- 团队记忆：成员提交、角色视图、权威性冲突
 - 知识库文档管理：上传/删除/重建索引
 - Office 解析：PDF/DOCX/PPTX/XLSX/XLS
 - Apple Container 预热池：warm/lease/quota

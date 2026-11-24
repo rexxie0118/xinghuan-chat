@@ -103,6 +103,10 @@ def extract_candidates(text: str) -> list[dict[str, Any]]:
     return candidates
 
 
+class MemoryConflict(RuntimeError):
+    """A lower-authority approval cannot override a higher-authority memory."""
+
+
 class UserMemoryService:
     def __init__(self, db_path: Path | str, *, semantic_judge: Any = None) -> None:
         self.db_path = Path(db_path)
@@ -212,7 +216,7 @@ class UserMemoryService:
                 memory_id = new_id("umem")
                 superseded: list[str] = []
                 superseded_snapshots: list[dict[str, Any]] = []
-                if subject and predicate:
+                if scope == "personal" and subject and predicate:
                     for row in active:
                         if row["subject"] != subject or row["predicate"] != predicate:
                             continue
@@ -231,8 +235,8 @@ class UserMemoryService:
                         source_conversation_id, source_message_id, created_at,
                         updated_at, last_used_at, valid_from, scope, scope_id,
                         source_uri, evidence_snippet, created_by, status,
-                        approved_by, approved_at, valid_to, superseded_by)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        approved_by, approved_at, authority, valid_to, superseded_by)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         memory_id,
@@ -259,6 +263,7 @@ class UserMemoryService:
                         status,
                         "",
                         "",
+                        0,
                         None,
                         "",
                     ),
@@ -406,7 +411,7 @@ class UserMemoryService:
             "source_conversation_id", "source_message_id", "created_at",
             "updated_at", "last_used_at", "valid_from", "scope", "scope_id",
             "source_uri", "evidence_snippet", "created_by", "status",
-            "approved_by", "approved_at", "valid_to", "superseded_by",
+            "approved_by", "approved_at", "authority", "valid_to", "superseded_by",
         ]
         values = [snapshot.get(column) for column in columns]
         conn = self._conn()
@@ -440,12 +445,30 @@ class UserMemoryService:
             )
             if not allowed:
                 return None
+            authority = 2 if role == "admin" else 1
             now = iso()
             with conn:
+                conflicts = conn.execute(
+                    "SELECT * FROM user_memories WHERE scope=? AND scope_id=?"
+                    " AND subject=? AND predicate=? AND valid_to IS NULL"
+                    " AND status='active' AND id<>?",
+                    (scope, row["scope_id"], row["subject"], row["predicate"], memory_id),
+                ).fetchall() if row["subject"] and row["predicate"] else []
+                for conflict in conflicts:
+                    if int(conflict["authority"] or 0) > authority:
+                        raise MemoryConflict(
+                            f"现有记忆权威性更高（{conflict['authority']} > {authority}）"
+                        )
+                for conflict in conflicts:
+                    conn.execute(
+                        "UPDATE user_memories SET valid_to=?, superseded_by=?, updated_at=?"
+                        " WHERE id=?",
+                        (now, memory_id, now, conflict["id"]),
+                    )
                 conn.execute(
                     "UPDATE user_memories SET status='active', approved_by=?,"
-                    " approved_at=?, updated_at=? WHERE id=?",
-                    (approver, now, now, memory_id),
+                    " approved_at=?, authority=?, updated_at=? WHERE id=?",
+                    (approver, now, authority, now, memory_id),
                 )
             return self.snapshot(memory_id)
         finally:
@@ -474,7 +497,7 @@ class UserMemoryService:
             with conn:
                 conn.execute(
                     "UPDATE user_memories SET status='rejected', approved_by=?,"
-                    " approved_at=?, updated_at=? WHERE id=?",
+                    " approved_at=?, authority=0, updated_at=? WHERE id=?",
                     (approver, now, now, memory_id),
                 )
             return self.snapshot(memory_id)

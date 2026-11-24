@@ -53,7 +53,7 @@ from .sandbox.apple_network import network_policy
 from .container_workspaces import ContainerWorkspaceService, RuntimeReaper
 from .tools import ToolError, build_tool_registry
 from .websearch import register_web_tools
-from .user_memory import UserMemoryService
+from .user_memory import MemoryConflict, UserMemoryService
 from .runtime.cancel import ActiveRuns
 from .runtime.failures import RunCancelled, classify_exception
 from .runtime import AgentKernel
@@ -640,10 +640,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if scope == "personal":
             return True
         if scope == "org":
-            return role == "admin"
-        return role == "admin" or (
-            role == "manager" and scope_id == str(user.get("department") or "")
-        )
+            return True
+        return role == "admin" or scope_id == str(user.get("department") or "")
 
     @app.get("/api/memories")
     def list_memories(user: dict[str, Any] = User) -> dict[str, Any]:
@@ -712,7 +710,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/memories/{memory_id}/approve")
     def approve_memory(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
-        result = memory_store.approve(memory_id, approver=user["id"], user=user)
+        try:
+            result = memory_store.approve(memory_id, approver=user["id"], user=user)
+        except MemoryConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         if result is None:
             raise HTTPException(status_code=403, detail="没有审批权限或状态不允许")
         audit.record(

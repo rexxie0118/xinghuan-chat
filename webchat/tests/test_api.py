@@ -182,7 +182,9 @@ class ApiTest(unittest.TestCase):
                     "/api/memories",
                     json={"kind": "fact", "content": "不能写全公司", "scope": "org"},
                 )
-                self.assertEqual(denied.status_code, 403)
+                self.assertEqual(denied.status_code, 200, denied.text)
+                self.assertEqual(denied.json()["memory"]["snapshot"]["status"], "pending")
+                client.delete(f"/api/memories/{denied.json()['memory']['id']}")
 
     def test_cancel_endpoint_without_active_run(self):
         with TestClient(self.app) as client:

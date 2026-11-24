@@ -169,7 +169,13 @@ v36 已完成
 v37 已完成
   LLM 语义去重（borderline candidate）
   词法快路径 + LLM 慢路径
-  失败降级，不阻塞写入</pre>
+  失败降级，不阻塞写入
+
+v38 已完成
+  部门/全公司共享记忆
+  成员提交 pending，manager/admin 审批
+  角色过滤视图
+  authority=2/1 的权威性冲突解决</pre>
     <p class="muted">
       当前仍是 per-user 记忆，近重复判断是词法相似度，不是 embedding 语义聚类；
       整理需要手动触发；没有团队记忆、审批流和记忆评测。
@@ -226,8 +232,8 @@ v37 已完成
         <tr>
           <td>P3</td>
           <td>团队/多 Agent 记忆</td>
-          <td>部门共享记忆、角色过滤视图、写权限、权威性冲突解决。</td>
-          <td><span class="status pending">待办</span></td>
+          <td>部门/org 共享；成员提交 pending；角色过滤；admin/manager 权威性冲突解决。</td>
+          <td><span class="status done">完成 · v38</span></td>
         </tr>
         <tr>
           <td>P4</td>
@@ -244,7 +250,7 @@ v37 已完成
     <pre class="record-pre">P1 治理        scope ✅ → provenance ✅ → approval ✅ → audit rollback ✅ → consolidation job ✅
 P2 评测        constraint / stale / access / approval / provenance ✅
 P2 语义合并    LLM borderline merge ✅
-P3 协作        department memory → role views → write authority
+P3 协作        department memory ✅ → role views ✅ → write authority ✅
 P4 高级能力    时间 KG / 多模态 / 语义聚类（按需）</pre>
     <p class="muted">
       不建议现在直接上复杂时间知识图谱。对星环 Chat 当前阶段，

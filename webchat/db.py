@@ -342,6 +342,7 @@ def init_db(path: Path | str) -> None:
                     "status": "TEXT NOT NULL DEFAULT 'active'",
                     "approved_by": "TEXT NOT NULL DEFAULT ''",
                     "approved_at": "TEXT NOT NULL DEFAULT ''",
+                    "authority": "INTEGER NOT NULL DEFAULT 0",
                 },
             )
             _ensure_columns(
