@@ -7,7 +7,9 @@
       "description": "Example trusted plugin: lifecycle hook + local ping tool",
       "enabled": false,
       "trusted": true,
+      "trust": "trusted",
       "permissions": ["hooks", "tools"],
+      "tool_allowlist": ["ping"],
       "hooks": ["agent_end"]
     }
   ]

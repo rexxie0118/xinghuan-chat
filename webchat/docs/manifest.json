@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-11",
+      "title": "插件权限与信任模型",
+      "date": "2026-11-24",
+      "summary": "manifest 增加 trust/tool_allowlist/secrets 和能力权限；未信任插件、未授权工具/secret 被拦截。",
+      "record": "iterations/2026-11-24-11.html",
+      "diagrams": [
+        "architecture/2026-11-24-plugin-trust.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-10",
       "title": "统一工具结果处理",
       "date": "2026-11-24",
@@ -387,6 +397,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-unified-tool-result.svg",
       "note": "工具结果形状已统一；知识库/外部混合引用仍简单优先外部。"
+    },
+    {
+      "id": "2026-11-24-v22",
+      "label": "v22 · Plugin Trust",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-plugin-trust.svg",
+      "note": "插件信任与权限边界已落地；in-process 仍不是 OS 沙箱。"
     }
   ]
 }

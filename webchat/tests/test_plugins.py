@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from webchat.runtime import AgentKernel
-from webchat.runtime.plugins import load_plugin_host
+from webchat.runtime.plugins import PluginManifest, load_plugin_host
 from webchat.tools import ToolRegistry
 
 
@@ -73,6 +73,35 @@ class PluginHostTest(unittest.TestCase):
         self.assertEqual(host.statuses[0].status, "error")
         self.assertIn("trusted", host.statuses[0].error)
         self.assertEqual(self.tools.list_tools(), [])
+
+    def test_tool_allowlist_is_enforced(self):
+        self.write([
+            {
+                "name": "audit",
+                "version": "1.0.0",
+                "entrypoint": "webchat.plugins.audit:plugin",
+                "trust": "trusted",
+                "permissions": ["hooks", "tools"],
+                "hooks": ["agent_end"],
+                "tool_allowlist": ["other"],
+            }
+        ])
+        host = load_plugin_host(self.settings, self.kernel, self.tools)
+        self.assertEqual(host.statuses[0].status, "error")
+        self.assertIn("未允许工具", host.statuses[0].error)
+
+    def test_secret_permission_is_required(self):
+        with self.assertRaises(ValueError):
+            PluginManifest.from_dict(
+                {
+                    "name": "x",
+                    "version": "1.0.0",
+                    "entrypoint": "webchat.plugins.audit:plugin",
+                    "trust": "trusted",
+                    "permissions": ["tools"],
+                    "secrets": ["TOKEN"],
+                }
+            )
 
     def test_disabled_plugin_is_not_loaded(self):
         self.write([

@@ -30,7 +30,8 @@ KNOWN_EVENTS = {
     "tool_call",
     "tool_result",
 }
-KNOWN_PERMISSIONS = {"hooks", "tools"}
+KNOWN_PERMISSIONS = {"hooks", "tools", "secrets", "network", "dangerous_tools"}
+TRUST_LEVELS = {"system", "trusted", "untrusted"}
 INTERNAL_PREFIX = "webchat.plugins."
 
 
@@ -44,6 +45,9 @@ class PluginManifest:
     trusted: bool = False
     permissions: set[str] = field(default_factory=set)
     hooks: set[str] = field(default_factory=set)
+    trust: str = "untrusted"
+    tool_allowlist: set[str] = field(default_factory=set)
+    secrets: set[str] = field(default_factory=set)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PluginManifest":
@@ -62,15 +66,30 @@ class PluginManifest:
         unknown_hooks = hooks - KNOWN_EVENTS
         if unknown_hooks:
             raise ValueError(f"未知 hook：{', '.join(sorted(unknown_hooks))}")
+        trusted = bool(data.get("trusted", False))
+        trust = str(data.get("trust") or "").strip().lower()
+        if trust and trust not in TRUST_LEVELS:
+            raise ValueError(f"未知 trust：{trust}")
+        if not trust:
+            trust = "trusted" if trusted else "untrusted"
+        if trusted and trust == "untrusted":
+            raise ValueError("trusted=true 与 trust=untrusted 冲突")
+        tool_allowlist = {str(item) for item in (data.get("tool_allowlist") or [])}
+        secrets = {str(item) for item in (data.get("secrets") or [])}
+        if secrets and "secrets" not in permissions:
+            raise ValueError("声明 secrets 时必须包含 secrets 权限")
         return cls(
             name=name,
             version=version,
             entrypoint=entrypoint,
             description=str(data.get("description") or ""),
             enabled=bool(data.get("enabled", True)),
-            trusted=bool(data.get("trusted", False)),
+            trusted=trust in {"trusted", "system"},
             permissions=permissions,
             hooks=hooks,
+            trust=trust,
+            tool_allowlist=tool_allowlist,
+            secrets=secrets,
         )
 
     def public(self) -> dict[str, Any]:
@@ -79,8 +98,11 @@ class PluginManifest:
             "version": self.version,
             "description": self.description,
             "trusted": self.trusted,
+            "trust": self.trust,
             "permissions": sorted(self.permissions),
             "hooks": sorted(self.hooks),
+            "tool_allowlist": sorted(self.tool_allowlist),
+            "secrets": sorted(self.secrets),
         }
 
 
@@ -112,6 +134,13 @@ class PluginContext:
             raise PermissionError(f"插件 manifest 未允许 hook：{event}")
         self.kernel.hooks.on(event, handler)
 
+    def secret(self, name: str) -> str:
+        if "secrets" not in self.manifest.permissions:
+            raise PermissionError("插件没有 secrets 权限")
+        if name not in self.manifest.secrets:
+            raise PermissionError(f"插件 manifest 未允许 secret：{name}")
+        return str(__import__("os").getenv(name, ""))
+
     def register_tool(
         self,
         name: str,
@@ -124,6 +153,10 @@ class PluginContext:
     ) -> None:
         if "tools" not in self.manifest.permissions:
             raise PermissionError("插件没有 tools 权限")
+        if self.manifest.tool_allowlist and name not in self.manifest.tool_allowlist:
+            raise PermissionError(f"插件 manifest 未允许工具：{name}")
+        if dangerous and "dangerous_tools" not in self.manifest.permissions:
+            raise PermissionError("注册 dangerous 工具需要 dangerous_tools 权限")
         self.host.register_tool(
             self.manifest.name,
             name,
@@ -183,8 +216,8 @@ class PluginHost:
         return self
 
     def _load_one(self, manifest: PluginManifest) -> None:
-        if not manifest.trusted:
-            raise PermissionError("插件未标记 trusted=true")
+        if manifest.trust not in {"trusted", "system"}:
+            raise PermissionError("插件不是 trusted/system，拒绝加载")
         if not getattr(self.settings, "plugins_allow_external", False):
             if not manifest.entrypoint.startswith(INTERNAL_PREFIX):
                 raise PermissionError("默认只允许 webchat.plugins.* 内部插件")
