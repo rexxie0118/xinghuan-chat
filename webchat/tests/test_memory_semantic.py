@@ -23,6 +23,11 @@ class SemanticJudgeTest(unittest.TestCase):
         self.assertTrue(judge.same("回答简洁", "尽量简短", "preference"))
         self.assertEqual(chat.calls, 1)
 
+    def test_parses_relation(self):
+        chat = FakeChat('{"relation": "conflict", "reason": "矛盾"}')
+        judge = LLMSemanticJudge(chat)
+        self.assertEqual(judge.relation("负责人张三", "负责人李四"), "conflict")
+
     def test_parses_no(self):
         judge = LLMSemanticJudge(FakeChat('{"same": false, "reason": "不同"}'))
         self.assertFalse(judge.same("喜欢蓝色", "喜欢红色", "preference"))

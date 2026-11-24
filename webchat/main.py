@@ -142,6 +142,7 @@ class MemoryIn(BaseModel):
     confidence: float = Field(default=0.8, ge=0, le=1)
     scope: Literal["personal", "department", "org"] = "personal"
     scope_id: str = Field(default="", max_length=80)
+    agent_id: str = Field(default="", max_length=80)
 
 
 class ConnectorIn(BaseModel):
@@ -667,6 +668,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 confidence=payload.confidence,
                 scope=payload.scope,
                 scope_id=scope_id,
+                agent_id=payload.agent_id,
                 source_uri="manual",
                 evidence_snippet=payload.content,
             )
@@ -703,6 +705,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "memories": memory_payload(user),
             "stats": memory_store.stats(user["id"], user=user),
         }
+
+    @app.get("/api/team/memories")
+    def team_memories(
+        scope: str = Query(default="", max_length=20),
+        status: str = Query(default="", max_length=20),
+        agent_id: str = Query(default="", max_length=80),
+        limit: int = Query(default=100, ge=1, le=300),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        if user.get("role") not in {"admin", "manager"}:
+            raise HTTPException(status_code=403, detail="需要团队管理权限")
+        rows = memory_store.team(
+            user=user, scope=scope, status=status, agent_id=agent_id, limit=limit
+        )
+        counts: dict[str, int] = {}
+        for row in rows:
+            key = f"{row.get('scope', '')}:{row.get('status', '')}"
+            counts[key] = counts.get(key, 0) + 1
+        return {"memories": rows, "counts": counts}
 
     @app.get("/api/memories/pending")
     def pending_memories(user: dict[str, Any] = User) -> dict[str, Any]:
@@ -1561,6 +1582,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         content,
                         conversation_id=conversation_id,
                         message_id=user_message["id"],
+                        agent_id=str(payload.agent_id or ""),
                     )
                     for item in extracted:
                         audit.record(

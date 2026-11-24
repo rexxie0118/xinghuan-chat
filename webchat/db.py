@@ -336,6 +336,7 @@ def init_db(path: Path | str) -> None:
                     "valid_from": "TEXT NOT NULL DEFAULT ''",
                     "scope": "TEXT NOT NULL DEFAULT 'personal'",
                     "scope_id": "TEXT NOT NULL DEFAULT ''",
+                    "agent_id": "TEXT NOT NULL DEFAULT ''",
                     "source_uri": "TEXT NOT NULL DEFAULT ''",
                     "evidence_snippet": "TEXT NOT NULL DEFAULT ''",
                     "created_by": "TEXT NOT NULL DEFAULT ''",

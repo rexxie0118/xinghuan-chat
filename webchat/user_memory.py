@@ -124,6 +124,18 @@ class UserMemoryService:
             LOG.warning("semantic memory merge failed: %s", exc)
             return False
 
+    def _semantic_relation(self, left: str, right: str) -> str:
+        judge = self.semantic_judge
+        if judge is None:
+            return "different"
+        try:
+            if hasattr(judge, "relation"):
+                return str(judge.relation(left, right))
+            return "same" if judge.same(left, right) else "different"
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("semantic relation failed: %s", exc)
+            return "different"
+
     def remember(
         self,
         user_id: str,
@@ -139,6 +151,7 @@ class UserMemoryService:
         source_message_id: str = "",
         scope: str = "personal",
         scope_id: str = "",
+        agent_id: str = "",
         source_uri: str = "",
         evidence_snippet: str = "",
         status: str = "active",
@@ -152,6 +165,7 @@ class UserMemoryService:
             raise ValueError(f"未知记忆状态：{status}")
         if scope != "personal" and status == "active":
             status = "pending"
+        agent_id = str(agent_id or "").strip()[:80]
         if scope == "personal":
             scope_id = user_id
         elif not scope_id:
@@ -234,9 +248,9 @@ class UserMemoryService:
                         predicate, object_text, importance, confidence, hits,
                         source_conversation_id, source_message_id, created_at,
                         updated_at, last_used_at, valid_from, scope, scope_id,
-                        source_uri, evidence_snippet, created_by, status,
+                        agent_id, source_uri, evidence_snippet, created_by, status,
                         approved_by, approved_at, authority, valid_to, superseded_by)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         memory_id,
@@ -257,6 +271,7 @@ class UserMemoryService:
                         now,
                         scope,
                         scope_id,
+                        agent_id,
                         source_uri or (f"conversation:{source_conversation_id}" if source_conversation_id else ""),
                         evidence_snippet[:MAX_CONTENT_CHARS],
                         user_id,
@@ -286,6 +301,7 @@ class UserMemoryService:
         *,
         conversation_id: str = "",
         message_id: str = "",
+        agent_id: str = "",
     ) -> list[dict[str, Any]]:
         results = []
         for candidate in extract_candidates(text):
@@ -296,6 +312,7 @@ class UserMemoryService:
                     source_message_id=message_id,
                     source_uri=f"conversation:{conversation_id}" if conversation_id else "",
                     evidence_snippet=text,
+                    agent_id=agent_id,
                     auto=True,
                     **candidate,
                 )
@@ -303,19 +320,29 @@ class UserMemoryService:
         return results
 
     @staticmethod
-    def _visible_clause(user_id: str, user: dict[str, Any] | None) -> tuple[str, list[Any]]:
-        clauses = ["(user_id=? AND scope='personal')"]
-        params: list[Any] = [user_id]
+    def _visible_clause(
+        user_id: str, user: dict[str, Any] | None, *, agent_id: str | None = None
+    ) -> tuple[str, list[Any]]:
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        def add(condition: str, values: list[Any]) -> None:
+            if agent_id is not None:
+                condition = f"({condition}) AND (agent_id='' OR agent_id=?)"
+                values = values + [agent_id]
+            conditions.append(condition)
+            params.extend(values)
+
+        add("user_id=? AND scope='personal'", [user_id])
         if user:
             role = str(user.get("role") or "member")
             department = str(user.get("department") or "")
             if role == "admin":
-                clauses.append("scope='department'")
+                add("scope='department'", [])
             elif department:
-                clauses.append("(scope='department' AND scope_id=?)")
-                params.append(department)
-            clauses.append("scope='org'")
-        return "(" + " OR ".join(clauses) + ")", params
+                add("scope='department' AND scope_id=?", [department])
+            add("scope='org'", [])
+        return "(" + " OR ".join(conditions) + ")", params
 
     def recall(
         self,
@@ -325,11 +352,12 @@ class UserMemoryService:
         k: int = 5,
         max_chars: int = MAX_RECALL_CHARS,
         user: dict[str, Any] | None = None,
+        agent_id: str = "",
     ) -> list[dict[str, Any]]:
         query = (query or "").strip()
         conn = self._conn()
         try:
-            visible, params = self._visible_clause(user_id, user)
+            visible, params = self._visible_clause(user_id, user, agent_id=agent_id)
             rows = conn.execute(
                 "SELECT * FROM user_memories WHERE " + visible
                 + " AND valid_to IS NULL AND status='active'"
@@ -410,7 +438,7 @@ class UserMemoryService:
             "object_text", "importance", "confidence", "hits",
             "source_conversation_id", "source_message_id", "created_at",
             "updated_at", "last_used_at", "valid_from", "scope", "scope_id",
-            "source_uri", "evidence_snippet", "created_by", "status",
+            "agent_id", "source_uri", "evidence_snippet", "created_by", "status",
             "approved_by", "approved_at", "authority", "valid_to", "superseded_by",
         ]
         values = [snapshot.get(column) for column in columns]
@@ -459,6 +487,18 @@ class UserMemoryService:
                         raise MemoryConflict(
                             f"现有记忆权威性更高（{conflict['authority']} > {authority}）"
                         )
+                if self.semantic_judge is not None:
+                    others = conn.execute(
+                        "SELECT content FROM user_memories WHERE scope=? AND scope_id=?"
+                        " AND valid_to IS NULL AND status='active' AND id<>? LIMIT 10",
+                        (scope, row["scope_id"], memory_id),
+                    ).fetchall()
+                    for other in others:
+                        relation = self._semantic_relation(
+                            other["content"], row["content"]
+                        )
+                        if relation == "conflict":
+                            raise MemoryConflict("与已有共享记忆语义冲突")
                 for conflict in conflicts:
                     conn.execute(
                         "UPDATE user_memories SET valid_to=?, superseded_by=?, updated_at=?"
@@ -559,6 +599,43 @@ class UserMemoryService:
                 conn.close()
             return {"action": "status", "memory_id": snapshot["id"], "status": metadata["previous_status"]}
         return None
+
+    def team(
+        self,
+        *,
+        user: dict[str, Any],
+        scope: str = "",
+        status: str = "",
+        agent_id: str = "",
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        role = str(user.get("role") or "member")
+        if role not in {"admin", "manager"}:
+            return []
+        clauses = ["scope IN ('department','org')", "valid_to IS NULL"]
+        params: list[Any] = []
+        if scope in {"department", "org"}:
+            clauses.append("scope=?")
+            params.append(scope)
+        if status in {"active", "pending", "rejected"}:
+            clauses.append("status=?")
+            params.append(status)
+        if agent_id:
+            clauses.append("agent_id=?")
+            params.append(agent_id)
+        if role != "admin":
+            clauses.append("(scope='org' OR scope_id=?)")
+            params.append(str(user.get("department") or ""))
+        conn = self._conn()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM user_memories WHERE " + " AND ".join(clauses)
+                + " ORDER BY created_at DESC LIMIT ?",
+                (*params, max(1, min(int(limit), 500))),
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
 
     def consolidate_all(self, *, expire_days: int = 180) -> dict[str, Any]:
         conn = self._conn()

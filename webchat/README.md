@@ -1249,6 +1249,58 @@ manager 审批 → authority=1
 删除是硬删除；审计事件保存删除前 snapshot，可通过 `/api/audit/{event_id}/undo` 恢复。  
 后台任务按 `WEBCHAT_MEMORY_CONSOLIDATE_INTERVAL` 定期整理个人记忆（默认 86400 秒）。
 
+### 团队记忆管理
+
+顶部「团队记忆」仅 admin / manager 可见：
+
+```text
+范围筛选：部门共享 / 全公司
+状态筛选：pending / active / rejected
+显示：内容、范围、状态、authority、agent_id、创建人
+操作：通过 / 拒绝 / 删除
+```
+
+管理 API：
+
+```http
+GET /api/team/memories?scope=&status=&agent_id=
+```
+
+权限：
+
+```text
+admin    全部
+manager  本部门 + org 只读
+member   无管理页
+```
+
+### per-Agent 记忆所有权
+
+`user_memories.agent_id` 支持把记忆绑定到某个 Agent：
+
+```text
+agent_id=''       通用记忆
+agent_id='xxx'    仅该 Agent 召回
+```
+
+召回时：
+
+```text
+通用记忆 + 当前 Agent 专属记忆
+```
+
+### 语义冲突
+
+审批共享记忆时，除 authority 外还会做 LLM 语义关系检查：
+
+```text
+relation=same      可合并
+relation=conflict  409，拒绝审批
+relation=different 保留
+```
+
+只在共享审批时检查，不阻塞个人记忆写入。
+
 ### 语义合并
 
 词法相似度 ≥ 0.90 直接合并；0.15–0.90 的同类型候选可交给 LLM 判定：
@@ -1592,7 +1644,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 106 项测试，全部通过。
+> 当前共 111 项测试，全部通过。
 
 ---
 

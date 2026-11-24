@@ -175,7 +175,13 @@ v38 已完成
   部门/全公司共享记忆
   成员提交 pending，manager/admin 审批
   角色过滤视图
-  authority=2/1 的权威性冲突解决</pre>
+  authority=2/1 的权威性冲突解决
+
+v39 已完成
+  团队记忆管理页
+  per-Agent 记忆所有权（agent_id）
+  共享审批的 LLM 语义冲突检查
+  时间知识图谱 / 多模态仍未做</pre>
     <p class="muted">
       当前仍是 per-user 记忆，近重复判断是词法相似度，不是 embedding 语义聚类；
       整理需要手动触发；没有团队记忆、审批流和记忆评测。
@@ -232,8 +238,8 @@ v38 已完成
         <tr>
           <td>P3</td>
           <td>团队/多 Agent 记忆</td>
-          <td>部门/org 共享；成员提交 pending；角色过滤；admin/manager 权威性冲突解决。</td>
-          <td><span class="status done">完成 · v38</span></td>
+          <td>部门/org 共享；成员提交 pending；角色过滤；authority + LLM 语义冲突；团队管理页；agent_id 所有权。</td>
+          <td><span class="status done">完成 · v39</span></td>
         </tr>
         <tr>
           <td>P4</td>

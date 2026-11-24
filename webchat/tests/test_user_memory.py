@@ -265,6 +265,81 @@ class UserMemoryTest(unittest.TestCase):
         with self.assertRaises(MemoryConflict):
             self.service.approve(pending["id"], approver=manager["id"], user=manager_user)
 
+    def test_agent_owned_memory(self):
+        self.service.remember(
+            self.user["id"], kind="fact", content="Agent A 专属记忆",
+            agent_id="agent-a",
+        )
+        self.service.remember(
+            self.user["id"], kind="fact", content="通用个人记忆",
+        )
+        generic = self.service.recall(self.user["id"], "记忆", user=repo.user_public(self.user))
+        self.assertFalse(any("Agent A" in item["content"] for item in generic))
+        scoped = self.service.recall(
+            self.user["id"], "记忆", user=repo.user_public(self.user), agent_id="agent-a"
+        )
+        self.assertTrue(any("Agent A" in item["content"] for item in scoped))
+
+    def test_team_view_roles(self):
+        conn = connect(self.db)
+        try:
+            manager = repo.create_user(
+                conn, username="team_manager", display_name="M", password_hash="x",
+                department="产品部", role="manager",
+            )
+            admin = repo.create_user(
+                conn, username="team_admin", display_name="A", password_hash="x",
+                role="admin",
+            )
+        finally:
+            conn.close()
+        self.service.remember(
+            self.user["id"], kind="fact", content="部门团队记忆",
+            scope="department", scope_id="产品部",
+        )
+        self.service.remember(
+            self.user["id"], kind="fact", content="全公司团队记忆",
+            scope="org", scope_id="org",
+        )
+        admin_user = repo.user_public(admin)
+        manager_user = repo.user_public(manager)
+        self.assertGreaterEqual(len(self.service.team(user=admin_user)), 2)
+        manager_rows = self.service.team(user=manager_user)
+        self.assertTrue(any(row["scope"] == "department" for row in manager_rows))
+        self.assertEqual(self.service.team(user=repo.user_public(self.user)), [])
+
+    def test_semantic_conflict_blocks_approval(self):
+        class Judge:
+            def relation(self, left, right, kind="fact"):
+                return "conflict"
+
+            def same(self, left, right, kind="fact"):
+                return False
+
+        conn = connect(self.db)
+        try:
+            admin = repo.create_user(
+                conn, username="conflict_admin", display_name="A", password_hash="x",
+                role="admin",
+            )
+        finally:
+            conn.close()
+        admin_user = repo.user_public(admin)
+        service = UserMemoryService(self.db, semantic_judge=Judge())
+        active = service.remember(
+            self.user["id"], kind="fact", content="负责人是张三",
+            subject="项目", predicate="负责人", object_text="张三",
+            scope="department", scope_id="产品部",
+        )
+        service.approve(active["id"], approver=admin["id"], user=admin_user)
+        pending = service.remember(
+            self.user["id"], kind="fact", content="负责人是李四",
+            subject="项目", predicate="负责人", object_text="李四",
+            scope="department", scope_id="产品部",
+        )
+        with self.assertRaises(MemoryConflict):
+            service.approve(pending["id"], approver=admin["id"], user=admin_user)
+
     def test_slot_supersede_and_forget(self):
         self.service.remember(
             self.user["id"], kind="fact", content="我的名字是张三",

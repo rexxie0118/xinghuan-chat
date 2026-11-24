@@ -1,0 +1,126 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-28</div>
+    <h1>团队记忆管理页 / per-Agent 所有权 / 语义冲突</h1>
+    <p class="lede">
+      P4 第一阶段：admin/manager 团队记忆管理页；user_memories.agent_id 支持
+      Agent 专属记忆；共享审批增加 LLM 语义冲突检查；时间 KG 与多模态暂不做。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：111 项通过</span>
+      <span>架构：v39</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>团队页</h2>
+    <pre class="record-pre">顶部「团队记忆」 admin/manager
+范围：部门 / 全公司
+状态：pending / active / rejected
+显示：内容、范围、状态、authority、agent_id、创建人
+操作：通过 / 拒绝 / 删除</pre>
+  </section>
+
+  <section>
+    <h2>Agent 所有权</h2>
+    <pre class="record-pre">agent_id=''       通用
+agent_id='xxx'    仅该 Agent 召回
+
+recall:
+  通用 + 当前 Agent 专属
+  scope 过滤仍生效</pre>
+  </section>
+
+  <section>
+    <h2>语义冲突</h2>
+    <pre class="record-pre">共享审批时：
+  authority 冲突 → 409
+  LLM relation=conflict → 409
+  relation=same → 允许（仍走合并策略）
+  LLM 失败 → 不阻断，降级
+
+只在共享审批，不阻塞个人写入</pre>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">team API: member 403, admin 200
+manager 只看到本部门 + org
+agent_a 专属记忆不被默认 Agent 召回
+语义 conflict 阻止审批
+111 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>团队页无批量操作和导出；</li>
+      <li>agent_id 只做可见性过滤，不做 Agent 间订阅；</li>
+      <li>语义冲突依赖 LLM，失败时只做 authority/槽位检查；</li>
+      <li>时间知识图谱和多模态记忆仍未实现；</li>
+      <li>没有 per-Agent 独立写权限。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-team-admin.svg" alt="v39 team admin" />
+      <figcaption>v39：团队管理页 + agent_id 所有权 + 语义冲突。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">43 项完成，0 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>声明式联网连接器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>连接器管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Chat 模式联网开关</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Web Research 工具链</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部来源引用</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>评测集与失败注入</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>部门 RBAC + 默认 Agent/KB</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>用户权限管理界面</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>知识库文档管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>PPTX / Excel 解析与入库</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>记忆质量：写入门槛 / 合并 / 预算 / 整理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 scope / provenance / audit</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>共享记忆审批 / 审计回滚 / 后台整理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>记忆评测集</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>语义合并</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P3</td><td>团队 / 多 Agent 记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P4</td><td>团队管理页 / per-Agent 所有权 / 语义冲突</td><td><span class="status done">完成</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

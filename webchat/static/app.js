@@ -813,6 +813,8 @@
     $("#user-subtitle").textContent = `${user.department || "未分组"} · ${user.role || "member"}`;
     const adminBtn = $("#admin-btn");
     if (adminBtn) adminBtn.hidden = user.role !== "admin";
+    const teamBtn = $("#team-memory-btn");
+    if (teamBtn) teamBtn.hidden = !["admin", "manager"].includes(user.role);
     $("#user-avatar").textContent = (user.display_name || user.username).slice(0, 1).toUpperCase();
     document.title = "星环 Chat";
     try {
@@ -2386,6 +2388,113 @@
     return root;
   }
 
+  async function openTeamMemory() {
+    const root = modalShell();
+    const card = document.createElement("div");
+    card.className = "modal-card team-memory-modal";
+    card.innerHTML = `
+      <div class="team-memory-head">
+        <div>
+          <p class="eyebrow">TEAM MEMORY</p>
+          <h3>团队记忆</h3>
+          <p>部门与全公司共享记忆；成员提交待审批，admin/manager 负责审批。</p>
+        </div>
+        <button class="icon-btn team-memory-close" type="button" aria-label="关闭团队记忆">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div class="team-memory-toolbar">
+        <select data-team-scope aria-label="范围">
+          <option value="">全部范围</option>
+          <option value="department">部门共享</option>
+          <option value="org">全公司</option>
+        </select>
+        <select data-team-status aria-label="状态">
+          <option value="">全部状态</option>
+          <option value="pending">待审批</option>
+          <option value="active">已生效</option>
+          <option value="rejected">已拒绝</option>
+        </select>
+      </div>
+      <div class="team-memory-body">
+        <div class="team-memory-list"></div>
+        <p class="team-memory-note">团队记忆按角色过滤：manager 只能看到本部门和全公司；admin 可看全部。审批后才会进入召回。</p>
+      </div>`;
+    root.append(card);
+    const close = () => { root.hidden = true; };
+    card.querySelector(".team-memory-close").addEventListener("click", close);
+    root.onclick = (event) => { if (event.target === root) close(); };
+    const list = card.querySelector(".team-memory-list");
+    const scopeSelect = card.querySelector("[data-team-scope]");
+    const statusSelect = card.querySelector("[data-team-status]");
+
+    function canApprove(memory) {
+      const role = state.user?.role || "member";
+      return role === "admin" || (role === "manager" && memory.scope === "department" && memory.scope_id === state.user?.department);
+    }
+
+    function canDelete(memory) {
+      const role = state.user?.role || "member";
+      return role === "admin" || (role === "manager" && memory.scope === "department" && memory.scope_id === state.user?.department);
+    }
+
+    function render(data) {
+      const memories = data.memories || [];
+      if (!memories.length) {
+        list.innerHTML = `<div class="team-memory-empty">没有符合条件的团队记忆。</div>`;
+        return;
+      }
+      list.innerHTML = memories.map((memory) => `
+        <article class="team-memory-card" data-team-id="${escapeHtml(memory.id)}">
+          <div class="team-memory-top">
+            <span class="team-memory-scope">${memory.scope === "org" ? "全公司" : "部门共享"}</span>
+            <span class="team-memory-status ${escapeHtml(memory.status)}">${escapeHtml(memory.status)}</span>
+            ${memory.agent_id ? `<span class="team-memory-scope">Agent ${escapeHtml(memory.agent_id)}</span>` : ""}
+            ${memory.authority ? `<span class="team-memory-scope">权威性 ${memory.authority}</span>` : ""}
+          </div>
+          <p class="team-memory-content">${escapeHtml(memory.content)}</p>
+          <div class="team-memory-meta">${escapeHtml(memory.scope_id || "")} · ${escapeHtml(memory.created_by || "")} · ${escapeHtml((memory.created_at || "").slice(0, 10))}</div>
+          <div class="team-memory-actions">
+            ${memory.status === "pending" && canApprove(memory) ? `<button class="approve" data-team-approve="${escapeHtml(memory.id)}" type="button">通过</button><button class="reject" data-team-reject="${escapeHtml(memory.id)}" type="button">拒绝</button>` : ""}
+            ${canDelete(memory) ? `<button class="delete" data-team-delete="${escapeHtml(memory.id)}" type="button">删除</button>` : ""}
+          </div>
+        </article>`).join("");
+    }
+
+    async function refresh() {
+      const params = new URLSearchParams();
+      if (scopeSelect.value) params.set("scope", scopeSelect.value);
+      if (statusSelect.value) params.set("status", statusSelect.value);
+      const data = await api(`/api/team/memories?${params.toString()}`);
+      render(data);
+    }
+
+    list.addEventListener("click", async (event) => {
+      const approve = event.target.closest("[data-team-approve]");
+      const reject = event.target.closest("[data-team-reject]");
+      const del = event.target.closest("[data-team-delete]");
+      if (!approve && !reject && !del) return;
+      const button = approve || reject || del;
+      const id = approve?.dataset.teamApprove || reject?.dataset.teamReject || del?.dataset.teamDelete;
+      if (del && !confirm("删除这条团队记忆？")) return;
+      button.disabled = true;
+      try {
+        if (approve) await api(`/api/memories/${encodeURIComponent(id)}/approve`, { method: "POST" });
+        else if (reject) await api(`/api/memories/${encodeURIComponent(id)}/reject`, { method: "POST" });
+        else await api(`/api/memories/${encodeURIComponent(id)}`, { method: "DELETE" });
+        toast(approve ? "已通过" : reject ? "已拒绝" : "已删除");
+        await refresh();
+      } catch (err) {
+        toast(err.message, "error");
+        button.disabled = false;
+      }
+    });
+
+    scopeSelect.addEventListener("change", refresh);
+    statusSelect.addEventListener("change", refresh);
+    try { await refresh(); } catch (err) { list.innerHTML = `<div class="team-memory-empty">${escapeHtml(err.message)}</div>`; }
+  }
+
   async function openKbDocs() {
     const root = modalShell();
     const card = document.createElement("div");
@@ -3923,6 +4032,11 @@
   // Delegated fallback: the memory entry is also reachable if an earlier
   // binding throws or a stale app.js is cached.
   document.addEventListener("click", (event) => {
+    if (event.target.closest("#team-memory-btn")) {
+      event.preventDefault();
+      openTeamMemory();
+      return;
+    }
     if (event.target.closest("#kb-docs-btn")) {
       event.preventDefault();
       openKbDocs();

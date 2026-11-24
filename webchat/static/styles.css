@@ -1998,3 +1998,30 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
 .memory-approve { color: #7fe0b0; }
 .memory-reject { color: #f4a3a3; }
 .memory-approve:hover, .memory-reject:hover { border-color: var(--line-strong); }
+
+/* ------------------------------------------------------- team memory */
+.team-memory-modal { width: min(860px, 100%); max-height: min(860px, 92vh); display: flex; flex-direction: column; padding: 0; }
+.team-memory-head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 20px 14px; border-bottom: 1px solid var(--line); }
+.team-memory-head h3 { margin: 0; }
+.team-memory-head p { margin: 5px 0 0; font-size: 10.5px; }
+.team-memory-close { margin-left: auto; }
+.team-memory-toolbar { display: flex; flex-wrap: wrap; gap: 7px; padding: 11px 20px; border-bottom: 1px solid var(--line); }
+.team-memory-toolbar select { height: 29px; padding: 0 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 9px; }
+.team-memory-body { overflow-y: auto; padding: 14px 20px 20px; }
+.team-memory-list { display: flex; flex-direction: column; gap: 7px; }
+.team-memory-card { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg-soft); }
+.team-memory-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.team-memory-scope, .team-memory-status { padding: 2px 6px; border-radius: 4px; font-size: 8px; border: 1px solid var(--line); color: var(--faint); }
+.team-memory-status.pending { color: #f4c47a; }
+.team-memory-status.rejected { color: #f4a3a3; }
+.team-memory-content { margin: 7px 0 0; font-size: 11px; line-height: 1.55; color: var(--text); }
+.team-memory-meta { margin-top: 5px; color: var(--faint); font-size: 8.5px; }
+.team-memory-actions { display: flex; gap: 5px; margin-top: 7px; }
+.team-memory-actions button { height: 22px; padding: 0 7px; border: 1px solid var(--line); border-radius: 4px; font-size: 8.5px; }
+.team-memory-actions .approve { color: #7fe0b0; }
+.team-memory-actions .reject, .team-memory-actions .delete { color: #f4a3a3; }
+.team-memory-empty { padding: 28px 10px; text-align: center; color: var(--faint); font-size: 10px; }
+.team-memory-note { margin-top: 12px; color: var(--faint); font-size: 9px; line-height: 1.6; }
+@media (max-width: 620px) {
+  .team-memory-head, .team-memory-toolbar, .team-memory-body { padding-left: 14px; padding-right: 14px; }
+}

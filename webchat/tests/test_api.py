@@ -112,6 +112,15 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(allowed.status_code, 200)
             self.assertTrue(any(u["role"] == "admin" for u in allowed.json()["users"]))
 
+    def test_team_memory_api_requires_manager_or_admin(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            self.assertEqual(client.get("/api/team/memories").status_code, 403)
+            self.login(client, "admin", "admin1234")
+            allowed = client.get("/api/team/memories")
+            self.assertEqual(allowed.status_code, 200)
+            self.assertIn("memories", allowed.json())
+
     def test_memory_ui_entry_is_served(self):
         with TestClient(self.app) as client:
             page = client.get("/")
@@ -120,9 +129,11 @@ class ApiTest(unittest.TestCase):
             self.assertIn('id="connector-btn"', page.text)
             self.assertIn('id="admin-btn"', page.text)
             self.assertIn('id="kb-docs-btn"', page.text)
+            self.assertIn('id="team-memory-btn"', page.text)
             js = client.get("/static/app.js")
             self.assertIn("openAdminUsers", js.text)
             self.assertIn("openKbDocs", js.text)
+            self.assertIn("openTeamMemory", js.text)
             self.assertEqual(js.status_code, 200)
             self.assertIn("openMemoryManager", js.text)
             self.assertIn("openConnectorManager", js.text)

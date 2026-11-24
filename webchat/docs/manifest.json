@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-28",
+      "title": "团队记忆管理页 / per-Agent 所有权 / 语义冲突",
+      "date": "2026-11-24",
+      "summary": "团队管理页、agent_id 记忆所有权、共享审批语义冲突；时间 KG/多模态待办。",
+      "record": "iterations/2026-11-24-28.html",
+      "diagrams": [
+        "architecture/2026-11-24-team-admin.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-27",
       "title": "团队 / 多 Agent 记忆",
       "date": "2026-11-24",
@@ -676,6 +686,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-team-memory.svg",
       "note": "团队共享记忆、审批和 authority 冲突已落地；无独立团队管理页。"
+    },
+    {
+      "id": "2026-11-24-v39",
+      "label": "v39 · Team Memory Admin",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-team-admin.svg",
+      "note": "团队管理页、per-Agent 所有权、语义冲突已落地；时间 KG/多模态未做。"
     }
   ]
 }
