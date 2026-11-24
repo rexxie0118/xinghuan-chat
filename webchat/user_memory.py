@@ -7,6 +7,7 @@ evidence. They are recalled as soft context and can be forgotten by the user.
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 import sqlite3
@@ -19,12 +20,15 @@ from kb.textutil import embed_tokens
 from .db import connect
 from .util import iso, new_id
 
+LOG = logging.getLogger("webchat.memory")
+
 VALID_KINDS = {"fact", "preference", "task"}
 VALID_SCOPES = {"personal", "department", "org"}
 VALID_STATUSES = {"active", "pending", "rejected", "archived"}
 MAX_CONTENT_CHARS = 300
 MIN_AUTO_CONFIDENCE = 0.6
 NEAR_DUPLICATE = 0.90
+SEMANTIC_CANDIDATE = 0.15
 MAX_RECALL_CHARS = 1200
 
 _EXPLICIT = re.compile(r"(?:请)?记住[：:，,\s]*(.+)", re.S)
@@ -100,11 +104,21 @@ def extract_candidates(text: str) -> list[dict[str, Any]]:
 
 
 class UserMemoryService:
-    def __init__(self, db_path: Path | str) -> None:
+    def __init__(self, db_path: Path | str, *, semantic_judge: Any = None) -> None:
         self.db_path = Path(db_path)
+        self.semantic_judge = semantic_judge
 
     def _conn(self) -> sqlite3.Connection:
         return connect(self.db_path)
+
+    def _semantically_same(self, left: str, right: str, kind: str) -> bool:
+        if self.semantic_judge is None:
+            return False
+        try:
+            return bool(self.semantic_judge.same(left, right, kind))
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("semantic memory merge failed: %s", exc)
+            return False
 
     def remember(
         self,
@@ -172,11 +186,18 @@ class UserMemoryService:
 
                 # 1. Near-duplicate / exact duplicate: merge into the existing row.
                 for row in active:
+                    similarity = _similarity(row["content"], content)
+                    semantic = (
+                        similarity >= SEMANTIC_CANDIDATE
+                        and row["kind"] == kind
+                        and self._semantically_same(row["content"], content, kind)
+                    )
                     duplicate = (
                         (subject and predicate and row["subject"] == subject
                          and row["predicate"] == predicate and row["object_text"] == object_text)
                         or _normalise(row["content"]) == _normalise(content)
-                        or _similarity(row["content"], content) >= NEAR_DUPLICATE
+                        or similarity >= NEAR_DUPLICATE
+                        or semantic
                     )
                     if not duplicate:
                         continue
@@ -568,7 +589,15 @@ class UserMemoryService:
                             and row["subject"] == other["subject"]
                             and row["predicate"] == other["predicate"]
                         )
-                        if not same_slot and _similarity(row["content"], other["content"]) < NEAR_DUPLICATE:
+                        similarity = _similarity(row["content"], other["content"])
+                        semantic = (
+                            not same_slot
+                            and row["kind"] == other["kind"]
+                            and similarity >= SEMANTIC_CANDIDATE
+                            and similarity < NEAR_DUPLICATE
+                            and self._semantically_same(row["content"], other["content"], row["kind"])
+                        )
+                        if not same_slot and similarity < NEAR_DUPLICATE and not semantic:
                             continue
                         conn.execute(
                             "UPDATE user_memories SET valid_to=?, superseded_by=?, updated_at=?"

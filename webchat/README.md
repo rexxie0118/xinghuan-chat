@@ -1235,6 +1235,28 @@ org         admin
 删除是硬删除；审计事件保存删除前 snapshot，可通过 `/api/audit/{event_id}/undo` 恢复。  
 后台任务按 `WEBCHAT_MEMORY_CONSOLIDATE_INTERVAL` 定期整理个人记忆（默认 86400 秒）。
 
+### 语义合并
+
+词法相似度 ≥ 0.90 直接合并；0.15–0.90 的同类型候选可交给 LLM 判定：
+
+```dotenv
+WEBCHAT_MEMORY_SEMANTIC=llm
+```
+
+例如：
+
+```text
+我偏好简洁回答
+回答请尽量简短
+→ 词法不高，但 LLM 判定同义
+→ 合并到同一条记忆
+```
+
+- 默认 `off`，避免每次写入都调用模型；
+- 只对同 kind、词法候选达到阈值的记录调用；
+- LLM 失败自动降级为不合并，不阻塞写入；
+- 合并后仍走近重复/槽位版本逻辑。
+
 ### 记忆评测集
 
 ```bash
@@ -1556,7 +1578,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 102 项测试，全部通过。
+> 当前共 105 项测试，全部通过。
 
 ---
 

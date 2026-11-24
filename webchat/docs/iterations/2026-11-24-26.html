@@ -1,0 +1,123 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-26</div>
+    <h1>语义合并：LLM 判定同义记忆</h1>
+    <p class="lede">
+      词法 ≥0.90 直接合并；0.15–0.90 的同 kind 候选交给 LLM 判定同义；
+      LLM 失败降级为不合并，不阻塞写入。consolidate 使用同一判定器。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：105 项通过</span>
+      <span>架构：v37</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>为什么</h2>
+    <pre class="record-pre">我偏好简洁回答
+回答请尽量简短
+
+词法相似度低
+但语义相同
+→ 应合并为一条</pre>
+  </section>
+
+  <section>
+    <h2>实现</h2>
+    <pre class="record-pre">词法 ≥ 0.90       直接 duplicate
+词法 0.15–0.90     同 kind 才调用 LLM
+LLM 返回 same      合并
+LLM 异常/否        保留两条</pre>
+  </section>
+
+  <section>
+    <h2>配置</h2>
+    <pre class="record-pre">WEBCHAT_MEMORY_SEMANTIC=off   # 默认
+WEBCHAT_MEMORY_SEMANTIC=llm   # 开启
+
+使用默认知识库的 chat provider
+不调用 embedding API</pre>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">Fake judge:
+  我偏好简洁回答
+  回答请尽量简短
+→ duplicate，只保留一条
+
+LLM judge JSON 解析通过
+105 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>LLM 只做二分类，不做聚类；</li>
+      <li>只在词法候选范围内调用，真正的零重叠同义句可能漏掉；</li>
+      <li>LLM 失败默认不合并，保证不会误合并；</li>
+      <li>会增加一次边界写入的延迟，默认关闭；</li>
+      <li>未使用 embedding API，因为当前 DeepSeek 无 embedding endpoint。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-memory-semantic.svg" alt="v37 semantic memory" />
+      <figcaption>v37：lexical fast path + LLM borderline adjudication。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">41 项完成，0 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>声明式联网连接器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>连接器管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Chat 模式联网开关</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Web Research 工具链</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部来源引用</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>评测集与失败注入</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>部门 RBAC + 默认 Agent/KB</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>用户权限管理界面</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>知识库文档管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>PPTX / Excel 解析与入库</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>记忆质量：写入门槛 / 合并 / 预算 / 整理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 scope / provenance / audit</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>共享记忆审批 / 审计回滚 / 后台整理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>记忆评测集</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>语义合并</td><td><span class="status done">完成</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

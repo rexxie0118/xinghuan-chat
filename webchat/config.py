@@ -92,6 +92,7 @@ class Settings:
     bootstrap_admin: str = ""
     memory_consolidate_interval: int = 86400
     memory_consolidate_expire_days: int = 180
+    memory_semantic: str = "off"
     queue_url: str = ""
     queue_name: str = "webchat:jobs"
     object_store: str = "local"
@@ -165,6 +166,7 @@ class Settings:
             bootstrap_admin=(os.getenv("WEBCHAT_BOOTSTRAP_ADMIN") or "").strip(),
             memory_consolidate_interval=int(os.getenv("WEBCHAT_MEMORY_CONSOLIDATE_INTERVAL", "86400")),
             memory_consolidate_expire_days=int(os.getenv("WEBCHAT_MEMORY_CONSOLIDATE_EXPIRE_DAYS", "180")),
+            memory_semantic=(os.getenv("WEBCHAT_MEMORY_SEMANTIC") or "off").strip().lower(),
             queue_url=(os.getenv("WEBCHAT_QUEUE_URL") or "").strip(),
             queue_name=(os.getenv("WEBCHAT_QUEUE_NAME") or "webchat:jobs").strip(),
             object_store=(os.getenv("WEBCHAT_OBJECT_STORE") or "local").strip(),

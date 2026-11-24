@@ -164,7 +164,12 @@ v35 已完成
 
 v36 已完成
   约束 / 过期 / 范围 / 审批 / 来源 / 回滚评测
-  python -m webchat.memory_evals</pre>
+  python -m webchat.memory_evals
+
+v37 已完成
+  LLM 语义去重（borderline candidate）
+  词法快路径 + LLM 慢路径
+  失败降级，不阻塞写入</pre>
     <p class="muted">
       当前仍是 per-user 记忆，近重复判断是词法相似度，不是 embedding 语义聚类；
       整理需要手动触发；没有团队记忆、审批流和记忆评测。
@@ -215,8 +220,8 @@ v36 已完成
         <tr>
           <td>P2</td>
           <td>语义合并</td>
-          <td>用 embedding 或 LLM 对候选记忆做语义聚类，替代纯词法近重复。</td>
-          <td><span class="status pending">待办</span></td>
+          <td>词法 ≥0.9 直接合并；0.15–0.9 同 kind 候选交给 LLM 判定；失败降级。</td>
+          <td><span class="status done">完成 · v37</span></td>
         </tr>
         <tr>
           <td>P3</td>
@@ -238,6 +243,7 @@ v36 已完成
     <h2>建议顺序</h2>
     <pre class="record-pre">P1 治理        scope ✅ → provenance ✅ → approval ✅ → audit rollback ✅ → consolidation job ✅
 P2 评测        constraint / stale / access / approval / provenance ✅
+P2 语义合并    LLM borderline merge ✅
 P3 协作        department memory → role views → write authority
 P4 高级能力    时间 KG / 多模态 / 语义聚类（按需）</pre>
     <p class="muted">

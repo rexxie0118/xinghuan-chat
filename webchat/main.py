@@ -42,6 +42,7 @@ from .concurrency import ConcurrencyGate, QueueFullError, QueueTimeoutError
 from .connectors import ConnectorError, ConnectorService, known_for, parse_spec, propose_with_llm
 from .config import Settings
 from .db import connect, init_db, is_integrity_error
+from .memory_semantic import LLMSemanticJudge
 from .observability import AuditLog, new_request_id, request_id_var, user_id_var
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from kb.ingest import SUPPORTED_SUFFIXES
@@ -302,7 +303,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         connector_service.load_approved()
     except Exception as exc:  # noqa: BLE001
         LOG.warning("connector load failed: %s", exc)
-    memory_store = UserMemoryService(settings.db_path)
+    semantic_judge = None
+    if settings.memory_semantic in {"llm", "on", "true", "1"}:
+        judge_service = registry.get(registry.infos[0].id)
+        if judge_service is not None:
+            semantic_judge = LLMSemanticJudge(judge_service.provider.chat)
+            LOG.info("semantic memory merge enabled (LLM judge)")
+    memory_store = UserMemoryService(settings.db_path, semantic_judge=semantic_judge)
     runner = AgentRunner(settings, sandbox, tools, memory_store=memory_store)
     kernel = AgentKernel(settings, runner)
     plugin_host = load_plugin_host(

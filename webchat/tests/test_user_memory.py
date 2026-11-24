@@ -209,6 +209,28 @@ class UserMemoryTest(unittest.TestCase):
         self.assertGreaterEqual(result["users"], 1)
         self.assertIn("merged", result)
 
+    def test_semantic_judge_merges_paraphrase(self):
+        class Judge:
+            def __init__(self):
+                self.calls = []
+
+            def same(self, left, right, kind):
+                self.calls.append((left, right, kind))
+                return "简短" in right
+
+        judge = Judge()
+        service = UserMemoryService(self.db, semantic_judge=judge)
+        first = service.remember(
+            self.user["id"], kind="preference", content="我偏好简洁回答"
+        )
+        second = service.remember(
+            self.user["id"], kind="preference", content="回答请尽量简短"
+        )
+        self.assertEqual(second["status"], "duplicate")
+        self.assertEqual(second["id"], first["id"])
+        self.assertTrue(judge.calls)
+        self.assertEqual(len(service.list(self.user["id"])), 1)
+
     def test_slot_supersede_and_forget(self):
         self.service.remember(
             self.user["id"], kind="fact", content="我的名字是张三",

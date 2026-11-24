@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-26",
+      "title": "语义合并：LLM 判定同义记忆",
+      "date": "2026-11-24",
+      "summary": "词法快路径 + LLM borderline 同义判定；失败降级；consolidate 共用。",
+      "record": "iterations/2026-11-24-26.html",
+      "diagrams": [
+        "architecture/2026-11-24-memory-semantic.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-25",
       "title": "记忆评测集 P2",
       "date": "2026-11-24",
@@ -642,6 +652,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-memory-evals.svg",
       "note": "记忆行为评测已接入 CI；尚未接 LoCoMo/LongMemEval。"
+    },
+    {
+      "id": "2026-11-24-v37",
+      "label": "v37 · Semantic Memory Merge",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-memory-semantic.svg",
+      "note": "LLM 语义去重已落地；默认关闭，需 WEBCHAT_MEMORY_SEMANTIC=llm。"
     }
   ]
 }
