@@ -1847,7 +1847,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def no_stale_shell(request: Request, call_next):
         response = await call_next(request)
-        if request.url.path in {"/", "/index.html"} or request.url.path.startswith("/static/"):
+        if (
+            request.url.path in {"/", "/index.html", "/docs/", "/docs/index.html"}
+            or request.url.path.startswith("/static/")
+            or request.url.path.startswith("/docs/")
+        ):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
             response.headers["Pragma"] = "no-cache"
         return response

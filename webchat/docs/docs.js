@@ -66,6 +66,20 @@
     }
   }
 
+  const researchLink = document.querySelector("#research-link");
+  researchLink?.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/docs/memory-trends.html", { cache: "no-store" });
+      if (!res.ok) throw new Error(`research HTTP ${res.status}`);
+      content.innerHTML = await res.text();
+      setActive(researchLink);
+      latestRecord = null;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      content.innerHTML = `<div class="error">研究笔记加载失败：${escapeHtml(err.message)}</div>`;
+    }
+  });
+
   todoLink.addEventListener("click", async () => {
     if (!latestRecord && manifest?.iterations?.length) {
       await openIteration(manifest.iterations[0]);

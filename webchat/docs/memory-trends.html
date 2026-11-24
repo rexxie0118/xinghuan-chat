@@ -1,0 +1,233 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">RESEARCH NOTE · 2026-11-24</div>
+    <h1>Agent 记忆系统：趋势与 backlog</h1>
+    <p class="lede">
+      截至 2026-11-24 的公开资料与工程实践。结论是：记忆正在从“向量库 + top-k”
+      变成“分层 + 时间/冲突 + 治理 + 评测”的工程系统；Context/Compaction 不等于 Memory。
+    </p>
+    <div class="meta-row">
+      <span>类型：研究笔记</span>
+      <span>资料：ACL/EMNLP 2026 + 厂商工程实践</span>
+      <span>对应实现：v33 记忆质量</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>一句话结论</h2>
+    <pre class="record-pre">Context / Compaction  → 服务当前任务
+Memory                → 服务未来任务
+
+未来竞争力不在“记得更多”，
+而在“写得准、选得对、可追溯、能遗忘、可评测”。</pre>
+  </section>
+
+  <section>
+    <h2>趋势</h2>
+    <table class="todo-table">
+      <thead><tr><th>趋势</th><th>变化</th><th>成熟度</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Context 与 Memory 分家</td>
+          <td>Compaction 保留当前工作状态；Memory 只保留跨任务可复用经验，不把记忆当事实数据库。</td>
+          <td>生产可用</td>
+        </tr>
+        <tr>
+          <td>混合记忆</td>
+          <td>向量做语义召回，图谱做关系/时间，SQL 做精确字段和权限，文件做可导出/可审阅。</td>
+          <td>生产模式，复杂度高</td>
+        </tr>
+        <tr>
+          <td>时间与冲突</td>
+          <td>valid_from / valid_to、superseded_by、[CURRENT] 标记；过期事实降权而不是简单覆盖。</td>
+          <td>研究到早期生产</td>
+        </tr>
+        <tr>
+          <td>可审计记忆</td>
+          <td>scope、来源、导出、回滚、删除、并发写、审计日志成为企业记忆的一部分。</td>
+          <td>企业产品化中</td>
+        </tr>
+        <tr>
+          <td>选择优于抽取</td>
+          <td>严格上下文预算下，从候选中选少量高价值记忆，比无限抽取更有效。</td>
+          <td>生产可用</td>
+        </tr>
+        <tr>
+          <td>评测升级</td>
+          <td>从“记住事实”转向隐式约束、权限、来源、冲突、保留期等操作级正确性。</td>
+          <td>快速演进</td>
+        </tr>
+        <tr>
+          <td>多 Agent 共享记忆</td>
+          <td>共享档案不够；需要角色可见性、写入者权威、来源和保留策略。</td>
+          <td>早期</td>
+        </tr>
+        <tr>
+          <td>多模态 / 可移植记忆</td>
+          <td>文件式、跨 Agent、跨平台记忆出现，但还不是第一优先级。</td>
+          <td>早期</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>关键证据</h2>
+    <ul>
+      <li>
+        <strong>Context ≠ Memory：</strong>
+        OpenAI Agents SDK 把 compaction 和 memory 拆开：compaction 让当前长任务继续，
+        memory 复用跨任务的工作流经验；记忆不应成为调查结论的 system of record。
+        <a href="https://developers.openai.com/cookbook/examples/agents_sdk/building_reliable_agents_memory_compaction" target="_blank" rel="noopener">OpenAI Cookbook</a>
+      </li>
+      <li>
+        <strong>文件式、可审计记忆：</strong>
+        Anthropic 的 Managed Agents Memory 以文件挂载，支持导出、API、审计、回滚、脱敏、
+        按 scope 共享，以及多 Agent 并发访问。
+        <a href="https://claude.com/blog/claude-managed-agents-memory" target="_blank" rel="noopener">Claude Managed Agents Memory</a>
+      </li>
+      <li>
+        <strong>时间知识图谱：</strong>
+        RoMem 用连续相位旋转区分“高频变化关系”和“稳定事实”，让过期事实降权而非删除；
+        在时序推理上报告 2–3× MRR/准确率提升。
+        <a href="https://aclanthology.org/2026.emnlp-main.437/" target="_blank" rel="noopener">EMNLP 2026 · RoMem</a>
+      </li>
+      <li>
+        <strong>协作记忆：</strong>
+        COLLABMEM 指出共享档案不足，正确性还要求信息到达正确角色、对未授权角色隐藏、
+        来源正确、按权威性解决冲突、按保留策略更新；TMS-GRAPH++ 使用角色过滤视图和
+        <code>[CURRENT]</code> 标记。
+        <a href="https://aclanthology.org/2026.emnlp-main.1194/" target="_blank" rel="noopener">EMNLP 2026 · COLLABMEM</a>
+      </li>
+      <li>
+        <strong>隐式约束评测：</strong>
+        LoCoMo-Plus 评估“用户早期说的目标/状态/价值观，在后续 cue 出现时能否被正确应用”，
+        而不是只评估表面事实回忆。
+        <a href="https://aclanthology.org/2026.acl-long.1150/" target="_blank" rel="noopener">ACL 2026 · LoCoMo-Plus</a>
+      </li>
+      <li>
+        <strong>评测可复现性：</strong>
+        LoCoMo 类对比会受 embedder、judge、query set、seed 影响；单一排行榜不能代替业务评测。
+        <a href="https://zenodo.org/records/22871152" target="_blank" rel="noopener">2026 · LoCoMo comparison</a>
+        （预印本）
+      </li>
+      <li>
+        <strong>2026 综述：</strong>
+        Forms × Functions × Dynamics 的 3×3×3 分类整理了约 200 篇论文，
+        说明记忆已经是完整系统设计问题。
+        <a href="https://zenodo.org/records/21623570" target="_blank" rel="noopener">Agent Memory Research in 2026</a>
+        （预印本）
+      </li>
+    </ul>
+    <p class="muted">
+      注：Zenodo 条目和厂商博客不是同行评审结论；ACL/EMNLP 论文也可能存在实验范围限制。
+      这里把它们作为趋势证据，不作为绝对排名。
+    </p>
+  </section>
+
+  <section>
+    <h2>哪些是噪音</h2>
+    <ul>
+      <li><strong>“无限记忆”：</strong>上下文、延迟、噪声和成本都有上限。</li>
+      <li><strong>“向量库就是记忆系统”：</strong>向量库只是召回层，缺少写入策略、冲突、权限、审计和遗忘。</li>
+      <li><strong>“全自动写入”：</strong>prompt injection、错误结论固化、隐私泄漏和跨用户污染风险高。</li>
+      <li><strong>“单一 benchmark 排名”：</strong>记忆评测对实现细节非常敏感，必须配合业务回归集。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>星环 Chat 当前状态</h2>
+    <pre class="record-pre">已有
+  user_memories：kind / importance / confidence
+  source_conversation_id / source_message_id
+  valid_from / valid_to / superseded_by
+  RAG + 本体图谱
+  记忆管理 UI / 审计事件
+
+v33 已完成
+  低置信度跳过
+  近重复合并
+  同槽位版本化
+  召回 confidence + 1200 字预算
+  手动整理 / 归档</pre>
+    <p class="muted">
+      当前仍是 per-user 记忆，近重复判断是词法相似度，不是 embedding 语义聚类；
+      整理需要手动触发；没有团队记忆、审批流和记忆评测。
+    </p>
+  </section>
+
+  <section>
+    <h2>Backlog</h2>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>验收标准</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>P0</td>
+          <td>记忆写入质量</td>
+          <td>低置信度跳过；近重复合并；同槽位 valid_to/superseded_by；召回预算。</td>
+          <td><span class="status done">完成 · v33</span></td>
+        </tr>
+        <tr>
+          <td>P1</td>
+          <td>记忆 scope</td>
+          <td>personal / department / org 三级；读取按角色过滤；写入有明确 owner。</td>
+          <td><span class="status pending">待办</span></td>
+        </tr>
+        <tr>
+          <td>P1</td>
+          <td>provenance</td>
+          <td>每条记忆有 source_uri、source_message_id、evidence_snippet、created_by、valid_from。</td>
+          <td><span class="status pending">待办</span></td>
+        </tr>
+        <tr>
+          <td>P1</td>
+          <td>审核与审计</td>
+          <td>敏感/自动记忆可审核；create/update/delete/consolidate 写 audit_events；支持回滚。</td>
+          <td><span class="status pending">待办</span></td>
+        </tr>
+        <tr>
+          <td>P1</td>
+          <td>记忆整理任务</td>
+          <td>后台定期 consolidation；支持 dry-run、归档、导出和用户确认。</td>
+          <td><span class="status pending">待办</span></td>
+        </tr>
+        <tr>
+          <td>P2</td>
+          <td>记忆评测集</td>
+          <td>覆盖早期约束、过期记忆、冲突事实、越权访问、来源正确性；接入 CI。</td>
+          <td><span class="status pending">待办</span></td>
+        </tr>
+        <tr>
+          <td>P2</td>
+          <td>语义合并</td>
+          <td>用 embedding 或 LLM 对候选记忆做语义聚类，替代纯词法近重复。</td>
+          <td><span class="status pending">待办</span></td>
+        </tr>
+        <tr>
+          <td>P3</td>
+          <td>团队/多 Agent 记忆</td>
+          <td>部门共享记忆、角色过滤视图、写权限、权威性冲突解决。</td>
+          <td><span class="status pending">待办</span></td>
+        </tr>
+        <tr>
+          <td>P4</td>
+          <td>时间知识图谱 / 多模态</td>
+          <td>仅在业务确有时序或多模态需求时投入；不做“为了架构而架构”。</td>
+          <td><span class="status pending">待办</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>建议顺序</h2>
+    <pre class="record-pre">P1 治理        scope → provenance → approval/audit → consolidation job
+P2 评测        constraint / stale / conflict / access / provenance
+P3 协作        department memory → role views → write authority
+P4 高级能力    时间 KG / 多模态 / 语义聚类（按需）</pre>
+    <p class="muted">
+      不建议现在直接上复杂时间知识图谱。对星环 Chat 当前阶段，
+      scope、来源、审计、评测的收益远高于增加存储形态。
+    </p>
+  </section>
+</article>
