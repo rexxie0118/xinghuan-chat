@@ -7,7 +7,7 @@
       历史架构图只追加、不覆盖；这里是最新的一张“当前视图”。
     </p>
     <div class="meta-row">
-      <span>运行栈：PG 16 + Redis 8 + Worker</span>
+      <span>运行栈：PG 16 + pgvector HNSW + Redis 8 + Worker</span>
       <span>KB：共享 PostgreSQL 表</span>
       <span>测试：123 项通过</span>
     </div>
@@ -31,7 +31,7 @@
         <tr><td>Redis 8</td><td><code>127.0.0.1:6379</code></td><td>任务队列 ready / processing / dead</td><td><span class="status done">运行中</span></td></tr>
         <tr><td>Worker</td><td>独立 Python 进程</td><td>消费队列，执行 AgentRunner</td><td><span class="status done">运行中</span></td></tr>
         <tr><td>Apple Container</td><td><code>xh-isolated</code></td><td>导入 Agent / Skill 执行</td><td><span class="status done">运行中</span></td></tr>
-        <tr><td>对象存储 / 文件</td><td><code>webchat/data</code></td><td>artifacts、memory_media、SQLite 备份</td><td><span class="status done">本地</span></td></tr>
+        <tr><td>对象存储 / 文件</td><td><code>webchat/data</code></td><td>artifacts、memory_media、控制面备份</td><td><span class="status done">本地</span></td></tr>
         <tr><td>DeepSeek API</td><td>外部 HTTPS</td><td>回答模型；本地 hash embedding</td><td><span class="status done">已配置</span></td></tr>
         <tr><td>Tavily / Web</td><td>外部 HTTPS</td><td>web_search / web_fetch</td><td><span class="status done">已配置</span></td></tr>
         <tr><td>Corporate SSO</td><td>OIDC / SAML</td><td>企业身份源</td><td><span class="status pending">未接入</span></td></tr>
@@ -73,8 +73,8 @@ Memory
         <tr><td>PostgreSQL</td><td>用户、会话、消息、Agent、KB 表、记忆、审计、队列元数据</td><td>是</td></tr>
         <tr><td>Redis</td><td>任务协调、lease、死信</td><td>是</td></tr>
         <tr><td>Object Store / 文件</td><td>artifacts、memory_media</td><td>是</td></tr>
-        <tr><td>SQLite <code>kb_*.sqlite3</code></td><td>迁移前 KB 备份</td><td>否（回滚）</td></tr>
-        <tr><td>pgvector</td><td>已启用扩展；HNSW 尚未接</td><td>下一步</td></tr>
+        <tr><td>SQLite <code>webchat.sqlite3</code></td><td>迁移前控制面备份（KB SQLite 已删除）</td><td>否（回滚）</td></tr>
+        <tr><td>pgvector</td><td>vector(256) + HNSW cosine 索引</td><td>是</td></tr>
       </tbody>
     </table>
   </section>
@@ -102,7 +102,7 @@ pg_isready -h 127.0.0.1 -p 5432</pre>
     <h2>边界</h2>
     <ul>
       <li>PostgreSQL 是本机 Homebrew 单实例，不是高可用集群；</li>
-      <li>知识库向量仍以 BYTEA + Python 余弦运行，pgvector HNSW 未接；</li>
+      <li>知识库向量已切到 pgvector vector(256) + HNSW；</li>
       <li>中文 FTS 使用 ILIKE / pg_trgm 回退，不等价 SQLite FTS5 BM25；</li>
       <li>Redis 是单实例，未配置密码/TLS；</li>
       <li>企业 SSO 尚未接入；</li>
@@ -113,7 +113,7 @@ pg_isready -h 127.0.0.1 -p 5432</pre>
   <section>
     <h2>历史入口</h2>
     <p class="muted">
-      侧栏「架构历史」保留所有版本；当前主图对应 v46。旧图不会被覆盖。
+      侧栏「架构历史」保留所有版本；当前主图对应 v47。旧图不会被覆盖。
     </p>
   </section>
 </article>

@@ -1141,11 +1141,19 @@ WEBCHAT_KB_DB_URL=postgresql://... python -m webchat.kb_pg_migrate --data-dir we
   vectors 仍用 BYTEA + Python 暴力余弦
 ```
 
-当前边界：
+当前实现：
 
-- pgvector 已安装并启用，但本轮先保留 BYTEA 兼容现有向量，pgvector HNSW 是下一步；
-- PostgreSQL 默认分词对中文不友好，FTS 当前用 ILIKE/pg_trgm 回退；
-- 原有 `kb_*.sqlite3` 未删除，作为回滚副本。
+- `vectors.vec` 已改为 `vector(256)`；
+- `idx_vectors_vec_hnsw` 使用 cosine HNSW；
+- 向量召回走 `vec <=> ?::vector ORDER BY ... LIMIT`；
+- `chunks.text` 有 pg_trgm GIN 索引，中文检索使用 ILIKE/pg_trgm 回退；
+- 迁移验证完成后已删除 `webchat/data/kb_*.sqlite3`，不再保留旧 KB 副本。
+
+升级旧 BYTEA 数据：
+
+```bash
+WEBCHAT_KB_DB_URL=postgresql://... python -m webchat.kb_pgvector_migrate --data-dir webchat/data --verify
+```
 
 ### 本地 Redis 实例
 

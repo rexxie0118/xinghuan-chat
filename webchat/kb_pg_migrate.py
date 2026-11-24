@@ -12,6 +12,8 @@ import json
 import os
 import sqlite3
 import sys
+
+import numpy as np
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,10 +49,18 @@ def _columns(conn: sqlite3.Connection, table: str) -> list[str]:
     return [row["name"] for row in conn.execute(f"PRAGMA table_info({table})")]
 
 
+def _vector_literal(value: object) -> str:
+    arr = np.frombuffer(bytes(value), dtype=np.float32)
+    return "[" + ",".join(f"{float(item):.8g}" for item in arr) + "]"
+
+
 def _insert_sql(table: str, columns: list[str]) -> str:
     cols = ["kb_id", *columns]
     quoted = ",".join('"' + column.replace('"', '""') + '"' for column in cols)
-    placeholders = ",".join("?" for _ in cols)
+    placeholders = ",".join(
+        "?::vector" if table == "vectors" and column == "vec" else "?"
+        for column in cols
+    )
     return f"INSERT INTO {table}({quoted}) VALUES({placeholders}) ON CONFLICT DO NOTHING"
 
 
@@ -71,7 +81,13 @@ def migrate_kb(kb_id: str, sqlite_path: Path, *, verify: bool = False) -> list[R
             skipped = 0
             with dest:
                 for row in rows:
-                    values = (kb_id, *(row[col] for col in cols))
+                    row_values = []
+                    for col in cols:
+                        value = row[col]
+                        if table == "vectors" and col == "vec":
+                            value = _vector_literal(value)
+                        row_values.append(value)
+                    values = (kb_id, *row_values)
                     cur = dest.execute(sql, values)
                     if int(getattr(cur, "rowcount", 1)) > 0:
                         copied += 1

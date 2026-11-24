@@ -108,6 +108,22 @@ class Retriever:
     # ------------------------------------------------------------ 三路召回
 
     def _vector_search(self, query: str, k: int) -> list[tuple[str, float]]:
+        if getattr(self.conn, "is_postgres", False):
+            q = self.provider.embedder.embed([query])
+            if q.size == 0:
+                return []
+            literal = "[" + ",".join(f"{float(value):.8g}" for value in q[0]) + "]"
+            rows = self.conn.execute(
+                "SELECT owner_id, 1 - (vec <=> ?::vector) AS score FROM vectors"
+                " WHERE owner_kind=? AND model=? AND dim=?"
+                " ORDER BY vec <=> ?::vector LIMIT ?",
+                (literal, KIND_CHUNK, self.provider.embedding_model, int(q.shape[1]), literal, k),
+            ).fetchall()
+            return [
+                (row["owner_id"], float(row["score"]))
+                for row in rows
+                if float(row["score"]) > 0
+            ]
         ids, matrix, dim = load_matrix(
             self.conn, KIND_CHUNK, model=self.provider.embedding_model
         )

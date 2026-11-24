@@ -229,6 +229,7 @@ PG_SCHEMA: list[str] = [
         FOREIGN KEY(kb_id, doc_id) REFERENCES documents(kb_id, id) ON DELETE CASCADE
     )""",
     "CREATE INDEX IF NOT EXISTS idx_chunks_kb_doc ON chunks(kb_id, doc_id, ord)",
+    "CREATE INDEX IF NOT EXISTS idx_chunks_text_trgm ON chunks USING gin (text gin_trgm_ops)",
     """CREATE TABLE IF NOT EXISTS chunk_fts (
         kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
         text TEXT NOT NULL,
@@ -243,10 +244,11 @@ PG_SCHEMA: list[str] = [
         owner_id TEXT NOT NULL,
         model TEXT NOT NULL,
         dim INTEGER NOT NULL,
-        vec BYTEA NOT NULL,
+        vec vector(256) NOT NULL,
         updated_at TEXT NOT NULL,
         PRIMARY KEY(kb_id, owner_kind, owner_id)
     )""",
+    "CREATE INDEX IF NOT EXISTS idx_vectors_vec_hnsw ON vectors USING hnsw (vec vector_cosine_ops)",
     """CREATE TABLE IF NOT EXISTS entity_types (
         kb_id TEXT NOT NULL DEFAULT current_setting('app.kb_id', true),
         name TEXT NOT NULL,
@@ -484,7 +486,12 @@ class PgConnection:
         return _PgCursor(self._raw.execute(sql.replace("?", "%s"), params))
 
     def executemany(self, sql: str, seq: Any):
-        return _PgCursor(self._raw.executemany(sql.replace("?", "%s"), seq))
+        # psycopg3 exposes executemany on cursors, not on Connection. Keep the
+        # facade simple and return the last statement's rowcount.
+        last = None
+        for params in seq:
+            last = self._raw.execute(sql.replace("?", "%s"), params)
+        return _PgCursor(last)
 
     def __enter__(self):
         return self

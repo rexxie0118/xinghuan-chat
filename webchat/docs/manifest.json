@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-25-01",
+      "title": "KB 向量切到 pgvector + HNSW",
+      "date": "2026-11-25",
+      "summary": "BYTEA→vector(256)，HNSW cosine，SQL top-k，pg_trgm GIN；验证后删除 KB SQLite。",
+      "record": "iterations/2026-11-25-01.html",
+      "diagrams": [
+        "architecture/2026-11-25-pgvector.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-34",
       "title": "知识库统一到 PostgreSQL",
       "date": "2026-11-24",
@@ -802,6 +812,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-current-architecture.svg",
       "note": "当前主架构：Web + PostgreSQL + Redis Worker + Apple Container；运行栈见 current-architecture.html。"
+    },
+    {
+      "id": "2026-11-25-v47",
+      "label": "v47 · pgvector HNSW",
+      "date": "2026-11-25",
+      "src": "architecture/2026-11-25-pgvector.svg",
+      "note": "KB 向量使用 pgvector vector(256)+HNSW；FTS 用 pg_trgm 回退。"
     }
   ]
 }

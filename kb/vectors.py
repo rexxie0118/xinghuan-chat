@@ -6,6 +6,7 @@ MVP 选择"暴力余弦"而不是 HNSW：十万级 chunk 以内，numpy 全量�
 
 from __future__ import annotations
 
+import json
 from typing import Sequence
 
 import numpy as np
@@ -17,12 +18,36 @@ KIND_MEMORY = "memory"
 KIND_ENTITY = "entity"
 
 
+def _is_pg(conn) -> bool:
+    return bool(getattr(conn, "is_postgres", False))
+
+
 def _conflict_target(conn) -> str:
-    return "kb_id, owner_kind, owner_id" if getattr(conn, "is_postgres", False) else "owner_kind, owner_id"
+    return "kb_id, owner_kind, owner_id" if _is_pg(conn) else "owner_kind, owner_id"
+
+
+def _vector_literal(arr: np.ndarray) -> str:
+    return "[" + ",".join(f"{float(value):.8g}" for value in arr) + "]"
+
+
+def _parse_vector(value: object) -> np.ndarray:
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return np.frombuffer(bytes(value), dtype=np.float32).copy()
+    text = str(value or "").strip()
+    return np.asarray(json.loads(text) if text else [], dtype=np.float32)
 
 
 def put_vector(conn, owner_kind: str, owner_id: str, model: str, vec: np.ndarray) -> None:
     arr = np.asarray(vec, dtype=np.float32).reshape(-1)
+    if _is_pg(conn):
+        conn.execute(
+            "INSERT INTO vectors(owner_kind, owner_id, model, dim, vec, updated_at)"
+            " VALUES(?,?,?,?,?::vector,?)"
+            f" ON CONFLICT({_conflict_target(conn)}) DO UPDATE SET"
+            " model=excluded.model, dim=excluded.dim, vec=excluded.vec, updated_at=excluded.updated_at",
+            (owner_kind, owner_id, model, int(arr.size), _vector_literal(arr), iso()),
+        )
+        return
     conn.execute(
         "INSERT INTO vectors(owner_kind, owner_id, model, dim, vec, updated_at)"
         " VALUES(?,?,?,?,?,?)"
@@ -37,10 +62,12 @@ def put_vectors(conn, owner_kind: str, model: str, ids: Sequence[str], matrix: n
     rows = []
     for i, owner_id in enumerate(ids):
         arr = np.asarray(matrix[i], dtype=np.float32).reshape(-1)
-        rows.append((owner_kind, owner_id, model, int(arr.size), arr.tobytes(), ts))
+        values = _vector_literal(arr) if _is_pg(conn) else arr.tobytes()
+        rows.append((owner_kind, owner_id, model, int(arr.size), values, ts))
+    placeholder = "?::vector" if _is_pg(conn) else "?"
     conn.executemany(
         "INSERT INTO vectors(owner_kind, owner_id, model, dim, vec, updated_at)"
-        " VALUES(?,?,?,?,?,?)"
+        f" VALUES(?,?,?,?,{placeholder},?)"
         f" ON CONFLICT({_conflict_target(conn)}) DO UPDATE SET"
         " model=excluded.model, dim=excluded.dim, vec=excluded.vec, updated_at=excluded.updated_at",
         rows,
@@ -54,7 +81,7 @@ def get_vector(conn, owner_kind: str, owner_id: str) -> np.ndarray | None:
     ).fetchone()
     if row is None:
         return None
-    return np.frombuffer(row["vec"], dtype=np.float32).copy()
+    return _parse_vector(row["vec"])
 
 
 def delete_vector(conn, owner_kind: str, owner_id: str) -> None:
@@ -82,7 +109,7 @@ def load_matrix(
         if int(r["dim"]) != dim:
             continue  # 换过 embedding 模型的历史向量，等 reindex 修复
         ids.append(r["owner_id"])
-        vecs.append(np.frombuffer(r["vec"], dtype=np.float32))
+        vecs.append(_parse_vector(r["vec"]))
     return ids, np.vstack(vecs) if vecs else np.zeros((0, dim), dtype=np.float32), dim
 
 
