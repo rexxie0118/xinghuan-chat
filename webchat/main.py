@@ -139,6 +139,8 @@ class MemoryIn(BaseModel):
     object_text: str = Field(default="", max_length=300)
     importance: float = Field(default=0.7, ge=0, le=1)
     confidence: float = Field(default=0.8, ge=0, le=1)
+    scope: Literal["personal", "department", "org"] = "personal"
+    scope_id: str = Field(default="", max_length=80)
 
 
 class ConnectorIn(BaseModel):
@@ -448,7 +450,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         raise HTTPException(status_code=403, detail="没有这个知识库的访问权限")
 
     def memory_payload(user: dict[str, Any]) -> list[dict[str, Any]]:
-        memories = memory_store.list(user["id"])
+        memories = memory_store.list(user["id"], user=user)
         ids = [m.get("source_conversation_id") for m in memories if m.get("source_conversation_id")]
         titles: dict[str, str] = {}
         if ids:
@@ -593,15 +595,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "departments": registry.departments,
         }
 
+    def can_write_memory_scope(user: dict[str, Any], scope: str, scope_id: str) -> bool:
+        role = str(user.get("role") or "member")
+        if scope == "personal":
+            return True
+        if scope == "org":
+            return role == "admin"
+        return role == "admin" or (
+            role == "manager" and scope_id == str(user.get("department") or "")
+        )
+
     @app.get("/api/memories")
     def list_memories(user: dict[str, Any] = User) -> dict[str, Any]:
         return {
             "memories": memory_payload(user),
-            "stats": memory_store.stats(user["id"]),
+            "stats": memory_store.stats(user["id"], user=user),
         }
 
     @app.post("/api/memories")
     def add_memory(payload: MemoryIn, user: dict[str, Any] = User) -> dict[str, Any]:
+        scope_id = payload.scope_id or (str(user.get("department") or "") if payload.scope == "department" else "org")
+        if not can_write_memory_scope(user, payload.scope, scope_id):
+            raise HTTPException(status_code=403, detail="没有写入该范围记忆的权限")
         try:
             result = memory_store.remember(
                 user["id"],
@@ -612,13 +627,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 object_text=payload.object_text,
                 importance=payload.importance,
                 confidence=payload.confidence,
+                scope=payload.scope,
+                scope_id=scope_id,
+                source_uri="manual",
+                evidence_snippet=payload.content,
+            )
+            audit.record(
+                event_type="memory_write",
+                component="memory",
+                action=payload.scope,
+                status="ok",
+                metadata={"result": result.get("status"), "memory_id": result.get("id", "")},
+                user_id=user["id"],
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
             "memory": result,
             "memories": memory_payload(user),
-            "stats": memory_store.stats(user["id"]),
+            "stats": memory_store.stats(user["id"], user=user),
         }
 
     @app.post("/api/memories/consolidate")
@@ -630,13 +657,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "result": result,
             "memories": memory_payload(user),
-            "stats": memory_store.stats(user["id"]),
+            "stats": memory_store.stats(user["id"], user=user),
         }
 
     @app.delete("/api/memories/{memory_id}")
     def delete_memory(memory_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
-        if not memory_store.forget(user["id"], memory_id):
+        if not memory_store.forget(user["id"], memory_id, user=user):
             raise HTTPException(status_code=404, detail="记忆不存在")
+        audit.record(
+            event_type="memory_delete",
+            component="memory",
+            action="forget",
+            status="ok",
+            metadata={"memory_id": memory_id},
+            user_id=user["id"],
+        )
         return {"ok": True}
 
     @app.post("/api/jobs/agent/{conversation_id}")
@@ -1419,12 +1454,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     first_user_text=content,
                 )
                 try:
-                    memory_store.extract_and_remember(
+                    extracted = memory_store.extract_and_remember(
                         user["id"],
                         content,
                         conversation_id=conversation_id,
                         message_id=user_message["id"],
                     )
+                    for item in extracted:
+                        audit.record(
+                            event_type="memory_write",
+                            component="memory",
+                            action="auto",
+                            status="ok" if item.get("status") != "skipped" else "skipped",
+                            metadata={
+                                "result": item.get("status", ""),
+                                "memory_id": item.get("id", ""),
+                            },
+                            user_id=user["id"],
+                            conversation_id=conversation_id,
+                        )
                 except Exception as exc:  # noqa: BLE001 - memory is optional
                     LOG.warning("memory extract failed: %s", exc)
             finally:

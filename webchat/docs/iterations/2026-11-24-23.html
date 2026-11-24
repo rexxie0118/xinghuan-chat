@@ -1,0 +1,119 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-23</div>
+    <h1>记忆治理：scope 与 provenance</h1>
+    <p class="lede">
+      P1 第一步：用户记忆支持 personal / department / org 三种范围；
+      记录 source_uri / evidence_snippet / created_by；召回、列表、删除按角色和范围校验，
+      写入/删除进入 audit_events。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：96 项通过</span>
+      <span>架构：v34</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>范围</h2>
+    <pre class="record-pre">personal     本人
+department   同部门可读；admin 全部；manager 本部门可写
+org          所有登录用户可读；仅 admin 可写</pre>
+  </section>
+
+  <section>
+    <h2>Provenance</h2>
+    <pre class="record-pre">scope
+scope_id
+source_uri
+evidence_snippet
+created_by
+valid_from / valid_to / superseded_by</pre>
+  </section>
+
+  <section>
+    <h2>审计</h2>
+    <pre class="record-pre">memory_write   自动/手动写入结果
+memory_delete  删除
+→ audit_events
+
+不保存 prompt/回答/记忆正文</pre>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">产品部共享记忆：
+  产品部用户可见
+  研发部用户不可见
+  admin 可见
+全公司记忆：所有用户可见
+来源字段正确保存
+96 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>status 字段已存在，但完整审批流还未实现；</li>
+      <li>部门/全公司记忆没有独立的管理 UI 审批列表；</li>
+      <li>consolidate 仍只处理个人记忆；</li>
+      <li>来源标题对共享记忆可能显示为空。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-memory-scope.svg" alt="v34 memory scope" />
+      <figcaption>v34：scope-aware recall/delete + provenance + audit。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">38 项完成，0 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>声明式联网连接器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>连接器管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Chat 模式联网开关</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Web Research 工具链</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部来源引用</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>评测集与失败注入</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>部门 RBAC + 默认 Agent/KB</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>用户权限管理界面</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>知识库文档管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>PPTX / Excel 解析与入库</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>记忆质量：写入门槛 / 合并 / 预算 / 整理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 scope / provenance / audit</td><td><span class="status done">完成</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

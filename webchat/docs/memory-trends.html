@@ -9,7 +9,7 @@
     <div class="meta-row">
       <span>类型：研究笔记</span>
       <span>资料：ACL/EMNLP 2026 + 厂商工程实践</span>
-      <span>对应实现：v33 记忆质量</span>
+      <span>对应实现：v34 scope / provenance</span>
     </div>
   </header>
 
@@ -149,7 +149,13 @@ v33 已完成
   近重复合并
   同槽位版本化
   召回 confidence + 1200 字预算
-  手动整理 / 归档</pre>
+  手动整理 / 归档
+
+v34 已完成
+  personal / department / org scope
+  scope_id 可见性与写入权限
+  source_uri / evidence_snippet / created_by
+  memory_write / memory_delete 审计事件</pre>
     <p class="muted">
       当前仍是 per-user 记忆，近重复判断是词法相似度，不是 embedding 语义聚类；
       整理需要手动触发；没有团队记忆、审批流和记忆评测。
@@ -171,19 +177,19 @@ v33 已完成
           <td>P1</td>
           <td>记忆 scope</td>
           <td>personal / department / org 三级；读取按角色过滤；写入有明确 owner。</td>
-          <td><span class="status pending">待办</span></td>
+          <td><span class="status done">完成 · v34</span></td>
         </tr>
         <tr>
           <td>P1</td>
           <td>provenance</td>
           <td>每条记忆有 source_uri、source_message_id、evidence_snippet、created_by、valid_from。</td>
-          <td><span class="status pending">待办</span></td>
+          <td><span class="status done">完成 · v34</span></td>
         </tr>
         <tr>
           <td>P1</td>
           <td>审核与审计</td>
-          <td>敏感/自动记忆可审核；create/update/delete/consolidate 写 audit_events；支持回滚。</td>
-          <td><span class="status pending">待办</span></td>
+          <td>create/delete 写 audit_events（已完成）；审核/回滚待办。</td>
+          <td><span class="status done">部分完成 · v34</span></td>
         </tr>
         <tr>
           <td>P1</td>
@@ -221,7 +227,7 @@ v33 已完成
 
   <section>
     <h2>建议顺序</h2>
-    <pre class="record-pre">P1 治理        scope → provenance → approval/audit → consolidation job
+    <pre class="record-pre">P1 治理        scope ✅ → provenance ✅ → approval/audit（部分）→ consolidation job
 P2 评测        constraint / stale / conflict / access / provenance
 P3 协作        department memory → role views → write authority
 P4 高级能力    时间 KG / 多模态 / 语义聚类（按需）</pre>

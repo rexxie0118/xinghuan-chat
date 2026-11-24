@@ -1976,3 +1976,15 @@ html[data-theme="light"] .execution pre { background: #171c27; color: #d5deec; }
 .memory-consolidate:disabled { opacity: .45; }
 .memory-stats { margin: 0 0 8px; color: var(--faint); font-size: 8.5px; }
 .memory-filters .memory-count { margin-left: 0; }
+
+/* ------------------------------------------------------- memory scope */
+.memory-form { grid-template-columns: 82px 86px 1fr auto; }
+.memory-scope {
+  padding: 2px 6px; border-radius: 4px; font-size: 8.5px;
+  color: var(--faint); border: 1px solid var(--line);
+}
+@media (max-width: 620px) {
+  .memory-form { grid-template-columns: 1fr 1fr auto; }
+  .memory-form select[aria-label="记忆范围"] { grid-column: auto; }
+  .memory-form input { grid-column: 1 / -1; }
+}

@@ -332,7 +332,15 @@ def init_db(path: Path | str) -> None:
             _ensure_columns(
                 conn,
                 "user_memories",
-                {"valid_from": "TEXT NOT NULL DEFAULT ''"},
+                {
+                    "valid_from": "TEXT NOT NULL DEFAULT ''",
+                    "scope": "TEXT NOT NULL DEFAULT 'personal'",
+                    "scope_id": "TEXT NOT NULL DEFAULT ''",
+                    "source_uri": "TEXT NOT NULL DEFAULT ''",
+                    "evidence_snippet": "TEXT NOT NULL DEFAULT ''",
+                    "created_by": "TEXT NOT NULL DEFAULT ''",
+                    "status": "TEXT NOT NULL DEFAULT 'active'",
+                },
             )
             _ensure_columns(
                 conn,

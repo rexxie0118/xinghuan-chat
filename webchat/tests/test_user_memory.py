@@ -94,6 +94,55 @@ class UserMemoryTest(unittest.TestCase):
         self.assertLessEqual(sum(len(item["content"]) for item in recalled), 80)
         self.assertLessEqual(len(recalled), 1)
 
+    def test_department_and_org_scope_visibility(self):
+        conn = connect(self.db)
+        try:
+            other = repo.create_user(
+                conn, username="other", display_name="Other", password_hash="x",
+                department="研发部",
+            )
+            admin = repo.create_user(
+                conn, username="admin", display_name="Admin", password_hash="x",
+                role="admin",
+            )
+        finally:
+            conn.close()
+        product = self.service.remember(
+            self.user["id"], kind="fact", content="产品部共享经验",
+            scope="department", scope_id="产品部",
+        )
+        org = self.service.remember(
+            self.user["id"], kind="fact", content="全公司共享规范",
+            scope="org", scope_id="org",
+        )
+        other_recall = self.service.recall(
+            other["id"], "共享", user=repo.user_public(other)
+        )
+        self.assertFalse(any(item["id"] == product["id"] for item in other_recall))
+        self.assertTrue(any(item["id"] == org["id"] for item in other_recall))
+        product_recall = self.service.recall(
+            self.user["id"], "共享", user=repo.user_public(self.user)
+        )
+        self.assertTrue(any(item["id"] == product["id"] for item in product_recall))
+        admin_recall = self.service.recall(
+            admin["id"], "共享", user=repo.user_public(admin)
+        )
+        self.assertTrue(any(item["id"] == product["id"] for item in admin_recall))
+
+    def test_provenance_is_stored(self):
+        result = self.service.remember(
+            self.user["id"], kind="fact", content="来源可追溯",
+            source_uri="conversation:conv-1",
+            evidence_snippet="用户原话：来源可追溯",
+        )
+        row = next(
+            item for item in self.service.list(self.user["id"])
+            if item["id"] == result["id"]
+        )
+        self.assertEqual(row["source_uri"], "conversation:conv-1")
+        self.assertEqual(row["evidence_snippet"], "用户原话：来源可追溯")
+        self.assertEqual(row["created_by"], self.user["id"])
+
     def test_slot_supersede_and_forget(self):
         self.service.remember(
             self.user["id"], kind="fact", content="我的名字是张三",

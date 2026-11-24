@@ -20,6 +20,8 @@ from .db import connect
 from .util import iso, new_id
 
 VALID_KINDS = {"fact", "preference", "task"}
+VALID_SCOPES = {"personal", "department", "org"}
+VALID_STATUSES = {"active", "pending", "archived"}
 MAX_CONTENT_CHARS = 300
 MIN_AUTO_CONFIDENCE = 0.6
 NEAR_DUPLICATE = 0.90
@@ -117,10 +119,23 @@ class UserMemoryService:
         confidence: float = 0.7,
         source_conversation_id: str = "",
         source_message_id: str = "",
+        scope: str = "personal",
+        scope_id: str = "",
+        source_uri: str = "",
+        evidence_snippet: str = "",
+        status: str = "active",
         auto: bool = False,
     ) -> dict[str, Any]:
         if kind not in VALID_KINDS:
             raise ValueError(f"未知记忆类型：{kind}")
+        if scope not in VALID_SCOPES:
+            raise ValueError(f"未知记忆范围：{scope}")
+        if status not in VALID_STATUSES:
+            raise ValueError(f"未知记忆状态：{status}")
+        if scope == "personal":
+            scope_id = user_id
+        elif not scope_id:
+            raise ValueError("department/org 记忆必须指定 scope_id")
         content = " ".join((content or "").split())[:MAX_CONTENT_CHARS]
         if not content:
             raise ValueError("记忆内容不能为空")
@@ -140,10 +155,18 @@ class UserMemoryService:
         conn = self._conn()
         try:
             with conn:
-                active = conn.execute(
-                    "SELECT * FROM user_memories WHERE user_id=? AND valid_to IS NULL",
-                    (user_id,),
-                ).fetchall()
+                if scope == "personal":
+                    active = conn.execute(
+                        "SELECT * FROM user_memories WHERE user_id=? AND scope='personal'"
+                        " AND valid_to IS NULL AND status='active'",
+                        (user_id,),
+                    ).fetchall()
+                else:
+                    active = conn.execute(
+                        "SELECT * FROM user_memories WHERE scope=? AND scope_id=?"
+                        " AND valid_to IS NULL AND status='active'",
+                        (scope, scope_id),
+                    ).fetchall()
 
                 # 1. Near-duplicate / exact duplicate: merge into the existing row.
                 for row in active:
@@ -181,8 +204,10 @@ class UserMemoryService:
                     INSERT INTO user_memories(id, user_id, kind, content, subject,
                         predicate, object_text, importance, confidence, hits,
                         source_conversation_id, source_message_id, created_at,
-                        updated_at, last_used_at, valid_from, valid_to, superseded_by)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        updated_at, last_used_at, valid_from, scope, scope_id,
+                        source_uri, evidence_snippet, created_by, status,
+                        valid_to, superseded_by)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         memory_id,
@@ -201,6 +226,12 @@ class UserMemoryService:
                         now,
                         now,
                         now,
+                        scope,
+                        scope_id,
+                        source_uri or (f"conversation:{source_conversation_id}" if source_conversation_id else ""),
+                        evidence_snippet[:MAX_CONTENT_CHARS],
+                        user_id,
+                        status,
                         None,
                         "",
                     ),
@@ -224,11 +255,28 @@ class UserMemoryService:
                     user_id,
                     source_conversation_id=conversation_id,
                     source_message_id=message_id,
+                    source_uri=f"conversation:{conversation_id}" if conversation_id else "",
+                    evidence_snippet=text,
                     auto=True,
                     **candidate,
                 )
             )
         return results
+
+    @staticmethod
+    def _visible_clause(user_id: str, user: dict[str, Any] | None) -> tuple[str, list[Any]]:
+        clauses = ["(user_id=? AND scope='personal')"]
+        params: list[Any] = [user_id]
+        if user:
+            role = str(user.get("role") or "member")
+            department = str(user.get("department") or "")
+            if role == "admin":
+                clauses.append("scope='department'")
+            elif department:
+                clauses.append("(scope='department' AND scope_id=?)")
+                params.append(department)
+            clauses.append("scope='org'")
+        return "(" + " OR ".join(clauses) + ")", params
 
     def recall(
         self,
@@ -237,14 +285,17 @@ class UserMemoryService:
         *,
         k: int = 5,
         max_chars: int = MAX_RECALL_CHARS,
+        user: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         query = (query or "").strip()
         conn = self._conn()
         try:
+            visible, params = self._visible_clause(user_id, user)
             rows = conn.execute(
-                "SELECT * FROM user_memories WHERE user_id=? AND valid_to IS NULL"
+                "SELECT * FROM user_memories WHERE " + visible
+                + " AND valid_to IS NULL AND status='active'"
                 " ORDER BY last_used_at DESC LIMIT 200",
-                (user_id,),
+                tuple(params),
             ).fetchall()
             if not rows:
                 return []
@@ -365,29 +416,32 @@ class UserMemoryService:
             conn.close()
         return {"merged": merged, "expired": expired, "stats": self.stats(user_id)}
 
-    def stats(self, user_id: str) -> dict[str, Any]:
+    def stats(self, user_id: str, *, user: dict[str, Any] | None = None) -> dict[str, Any]:
         conn = self._conn()
         try:
+            visible, params = self._visible_clause(user_id, user)
             active = conn.execute(
-                "SELECT COUNT(*) AS c FROM user_memories WHERE user_id=? AND valid_to IS NULL",
-                (user_id,),
+                "SELECT COUNT(*) AS c FROM user_memories WHERE " + visible
+                + " AND valid_to IS NULL AND status='active'",
+                tuple(params),
             ).fetchone()["c"]
             total = conn.execute(
-                "SELECT COUNT(*) AS c FROM user_memories WHERE user_id=?",
-                (user_id,),
+                "SELECT COUNT(*) AS c FROM user_memories WHERE " + visible,
+                tuple(params),
             ).fetchone()["c"]
             kinds = {
                 row["kind"]: row["c"]
                 for row in conn.execute(
                     "SELECT kind, COUNT(*) AS c FROM user_memories"
-                    " WHERE user_id=? AND valid_to IS NULL GROUP BY kind",
-                    (user_id,),
+                    " WHERE " + visible + " AND valid_to IS NULL AND status='active'"
+                    " GROUP BY kind",
+                    tuple(params),
                 ).fetchall()
             }
             avg = conn.execute(
                 "SELECT AVG(confidence) AS c FROM user_memories"
-                " WHERE user_id=? AND valid_to IS NULL",
-                (user_id,),
+                " WHERE " + visible + " AND valid_to IS NULL AND status='active'",
+                tuple(params),
             ).fetchone()["c"]
             return {
                 "active": int(active),
@@ -398,24 +452,56 @@ class UserMemoryService:
         finally:
             conn.close()
 
-    def list(self, user_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    def list(
+        self,
+        user_id: str,
+        *,
+        limit: int = 50,
+        user: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         conn = self._conn()
         try:
+            visible, params = self._visible_clause(user_id, user)
             rows = conn.execute(
-                "SELECT * FROM user_memories WHERE user_id=? AND valid_to IS NULL"
+                "SELECT * FROM user_memories WHERE " + visible
+                + " AND valid_to IS NULL AND status IN ('active','pending')"
                 " ORDER BY created_at DESC LIMIT ?",
-                (user_id, max(1, min(int(limit), 200))),
+                (*params, max(1, min(int(limit), 200))),
             ).fetchall()
             return [dict(row) for row in rows]
         finally:
             conn.close()
 
-    def forget(self, user_id: str, memory_id: str) -> bool:
+    def forget(
+        self,
+        user_id: str,
+        memory_id: str,
+        *,
+        user: dict[str, Any] | None = None,
+    ) -> bool:
         conn = self._conn()
         try:
+            row = conn.execute(
+                "SELECT * FROM user_memories WHERE id=?", (memory_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            scope = str(row["scope"] or "personal")
+            allowed = row["user_id"] == user_id and scope == "personal"
+            if user:
+                role = str(user.get("role") or "member")
+                if scope == "org":
+                    allowed = role == "admin"
+                elif scope == "department":
+                    allowed = role == "admin" or (
+                        role == "manager"
+                        and row["scope_id"] == str(user.get("department") or "")
+                    )
+            if not allowed:
+                return False
             with conn:
                 cur = conn.execute(
-                    "DELETE FROM user_memories WHERE id=? AND user_id=?", (memory_id, user_id)
+                    "DELETE FROM user_memories WHERE id=?", (memory_id,)
                 )
             return cur.rowcount > 0
         finally:

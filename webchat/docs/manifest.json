@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-23",
+      "title": "记忆治理：scope 与 provenance",
+      "date": "2026-11-24",
+      "summary": "personal/department/org scope、来源字段、可见性/删除权限和记忆审计事件。",
+      "record": "iterations/2026-11-24-23.html",
+      "diagrams": [
+        "architecture/2026-11-24-memory-scope.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-22",
       "title": "记忆质量：写入门槛、合并、预算与整理",
       "date": "2026-11-24",
@@ -591,6 +601,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-memory-quality.svg",
       "note": "记忆写入质量、版本化、召回预算和整理已落地。"
+    },
+    {
+      "id": "2026-11-24-v34",
+      "label": "v34 · Memory Scope",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-memory-scope.svg",
+      "note": "scope-aware 记忆和 provenance 已落地；完整审批流待办。"
     }
   ]
 }

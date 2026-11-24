@@ -201,7 +201,7 @@ class AgentRunner:
         memories: list[dict[str, Any]] = []
         if self.memory_store is not None and user.get("id"):
             try:
-                memories = self.memory_store.recall(user["id"], question, k=5)
+                memories = self.memory_store.recall(user["id"], question, k=5, user=user)
             except Exception as exc:  # noqa: BLE001 - memory is soft context
                 LOG.warning("user memory recall failed: %s", exc)
         self._emit(

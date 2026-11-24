@@ -2913,6 +2913,17 @@
     return `${date.getMonth() + 1}月${date.getDate()}日`;
   }
 
+  function memoryScopeLabel(scope) {
+    return ({ personal: "个人", department: "部门", org: "全公司" })[scope] || "个人";
+  }
+
+  function canDeleteMemory(memory) {
+    if ((memory.scope || "personal") === "personal") return true;
+    const role = state.user?.role || "member";
+    if (role === "admin") return true;
+    return role === "manager" && memory.scope === "department" && memory.scope_id === state.user?.department;
+  }
+
   async function openMemoryManager() {
     const root = modalShell();
     const card = document.createElement("div");
@@ -2934,6 +2945,11 @@
             <option value="fact">事实</option>
             <option value="preference">偏好</option>
             <option value="task">任务</option>
+          </select>
+          <select aria-label="记忆范围">
+            <option value="personal">个人</option>
+            <option value="department">部门</option>
+            <option value="org">全公司</option>
           </select>
           <input maxlength="300" placeholder="例如：回答尽量简洁" aria-label="记忆内容" required>
           <button class="btn primary" type="submit">记住</button>
@@ -2962,7 +2978,8 @@
     const consolidateBtn = card.querySelector("[data-memory-consolidate]");
     const form = card.querySelector(".memory-form");
     const input = form.querySelector("input");
-    const kind = form.querySelector("select");
+    const kind = form.querySelector("select[aria-label='记忆类型']");
+    const scope = form.querySelector("select[aria-label='记忆范围']");
     let memories = [];
     let stats = null;
     let filter = "all";
@@ -2988,10 +3005,11 @@
           <article class="memory-card" data-memory-id="${escapeHtml(memory.id)}">
             <div class="memory-card-top">
               <span class="memory-kind ${kindClass}">${memoryKindLabel(memory.kind)}</span>
+              <span class="memory-scope">${memoryScopeLabel(memory.scope)}</span>
               <time>${memoryDate(memory.created_at)}</time>
-              <button class="memory-delete" type="button" data-memory-delete="${escapeHtml(memory.id)}" title="删除这条记忆">
+              ${canDeleteMemory(memory) ? `<button class="memory-delete" type="button" data-memory-delete="${escapeHtml(memory.id)}" title="删除这条记忆">
                 <svg class="icon"><use href="#i-trash"/></svg>
-              </button>
+              </button>` : ""}
             </div>
             <p class="memory-content">${escapeHtml(memory.content)}</p>
             <div class="memory-source">${source}${memory.hits ? ` · 已使用 ${memory.hits} 次` : ""} · 置信度 ${Number(memory.confidence || 0).toFixed(2)}</div>
