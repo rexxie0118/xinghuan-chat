@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-20",
+      "title": "知识库文档管理 UI",
+      "date": "2026-11-24",
+      "summary": "知识库文档上传/列表/删除/重建索引；admin/manager 可写，member 只读。",
+      "record": "iterations/2026-11-24-20.html",
+      "diagrams": [
+        "architecture/2026-11-24-kb-docs.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-19",
       "title": "用户权限管理界面",
       "date": "2026-11-24",
@@ -540,6 +550,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-admin-ui.svg",
       "note": "admin 用户管理 UI 已落地；无删除/最后一个 admin 保护。"
+    },
+    {
+      "id": "2026-11-24-v31",
+      "label": "v31 · KB Document Management",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-kb-docs.svg",
+      "note": "KB 文档上传、删除、重建索引 UI/API 已落地。"
     }
   ]
 }

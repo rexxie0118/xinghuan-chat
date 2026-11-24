@@ -26,7 +26,7 @@ LOG = logging.getLogger("webchat.kb")
 from kb.answer import synthesize  # noqa: E402
 from kb.config import load_config  # noqa: E402
 from kb.db import connect, init_schema  # noqa: E402
-from kb.ingest import Ingester  # noqa: E402
+from kb.ingest import Ingester, SUPPORTED_SUFFIXES, remove_document  # noqa: E402
 from kb.ontology import Ontology  # noqa: E402
 from kb.providers import Provider, ProviderError, build_provider  # noqa: E402
 from kb.providers.mock import MockChat, MockEmbedder  # noqa: E402
@@ -425,6 +425,80 @@ class KnowledgeService:
             }
         finally:
             conn.close()
+
+    def documents(self) -> list[dict[str, Any]]:
+        conn = self._connection()
+        try:
+            rows = conn.execute(
+                """SELECT d.id, d.source_uri, d.title, d.doc_type, d.created_at,
+                          d.updated_at,
+                          (SELECT COUNT(*) FROM chunks c WHERE c.doc_id=d.id) AS chunks
+                   FROM documents d ORDER BY d.updated_at DESC, d.title"""
+            ).fetchall()
+            return [
+                {
+                    "id": row["id"],
+                    "source_name": Path(row["source_uri"]).name,
+                    "title": row["title"],
+                    "doc_type": row["doc_type"],
+                    "chunks": row["chunks"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                }
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
+    def ingest_file(self, path: Path) -> dict[str, Any]:
+        with self._lock:
+            conn = self._connection()
+            try:
+                ingestor = Ingester(
+                    conn,
+                    self.cfg,
+                    self.provider,
+                    progress=lambda msg: LOG.debug("ingest %s", msg),
+                )
+                report = ingestor.ingest_file(path)
+                self.corpus = self._corpus_counts(conn)
+                return report.__dict__
+            finally:
+                conn.close()
+
+    def delete_document(self, doc_id: str) -> int:
+        with self._lock:
+            conn = self._connection()
+            try:
+                row = conn.execute(
+                    "SELECT source_uri FROM documents WHERE id=?", (doc_id,)
+                ).fetchone()
+                if row is None:
+                    return 0
+                removed = remove_document(conn, doc_id)
+                source = Path(row["source_uri"])
+                try:
+                    source.resolve().relative_to(self.knowledge_dir)
+                    if source.is_file():
+                        source.unlink()
+                except (ValueError, OSError):
+                    pass
+                self.corpus = self._corpus_counts(conn)
+                return removed
+            finally:
+                conn.close()
+
+    def reindex(self) -> dict[str, Any]:
+        with self._lock:
+            conn = self._connection()
+            try:
+                before = self._corpus_counts(conn)
+                self._ingest(conn, force=True)
+                after = self._corpus_counts(conn)
+                self.corpus = after
+                return {"before": before, "after": after}
+            finally:
+                conn.close()
 
     def suggestions(self, question: str, result: dict[str, Any]) -> list[str]:
         out: list[str] = []

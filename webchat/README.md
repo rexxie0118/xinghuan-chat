@@ -508,6 +508,45 @@ GET /api/containers/pool
 
 ---
 
+## 4.1 知识库文档管理
+
+顶部「知识库文档」打开管理弹窗：
+
+```text
+选择知识库
+上传文档（.md / .txt / .rst / .pdf / .docx）
+列出标题/文件/类型/分块数/更新时间
+删除（同时删除源文件）
+重建索引
+```
+
+权限：
+
+```text
+admin    所有 KB
+manager  本部门 KB
+member   只读
+```
+
+API：
+
+```http
+GET    /api/kb/documents?kb=product
+POST   /api/kb/documents?kb=product   multipart file
+DELETE /api/kb/documents/{doc_id}?kb=product
+POST   /api/kb/reindex?kb=product
+```
+
+上传后立即解析、分块、向量、FTS、本体抽取；删除会清理文档、chunks、向量和 mentions。
+
+限制：
+
+- 单文件 10MB；
+- PDF 需要 `pypdf`；
+- DOCX 需要 `python-docx`；
+- 扫描 PDF 不支持 OCR；
+- 上传目录必须是 `webchat/knowledge/<kb-id>/`。
+
 ## 4.2 部门 RBAC
 
 角色：
@@ -1446,7 +1485,7 @@ cd xinghuan-chat
 
 覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片、Apple Container 预热池/配额。
 
-> 当前共 86 项测试，全部通过。
+> 当前共 87 项测试，全部通过。
 
 ---
 

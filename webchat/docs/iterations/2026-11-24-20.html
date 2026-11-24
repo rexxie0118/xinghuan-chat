@@ -1,0 +1,106 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-20</div>
+    <h1>知识库文档管理 UI</h1>
+    <p class="lede">
+      顶部新增「知识库文档」：选择知识库、上传文档、查看分块数、删除源文件、
+      强制重建索引；admin/manager 可写，member 只读。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：87 项通过</span>
+      <span>架构：v31</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>UI</h2>
+    <pre class="record-pre">知识库文档
+选择 KB
+上传 .md/.txt/.rst/.pdf/.docx
+列表：标题 / 文件 / 类型 / 分块 / 更新时间
+删除 → 源文件 + 索引
+重建索引</pre>
+  </section>
+
+  <section>
+    <h2>API</h2>
+    <pre class="record-pre">GET    /api/kb/documents?kb=product
+POST   /api/kb/documents?kb=product
+DELETE /api/kb/documents/{id}?kb=product
+POST   /api/kb/reindex?kb=product</pre>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">admin 上传 kb-docs-test.md
+→ documents 包含该文档
+→ DELETE 后列表移除
+→ 源文件删除
+87 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>单文件 10MB；</li>
+      <li>PDF/DOCX 依赖未默认安装；</li>
+      <li>扫描 PDF 无 OCR；</li>
+      <li>没有批量上传/拖拽排序；</li>
+      <li>删除不保留历史版本。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-kb-docs.svg" alt="v31 KB docs" />
+      <figcaption>v31：KB 文档上传/删除/重建索引。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">35 项完成，0 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>声明式联网连接器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>连接器管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Chat 模式联网开关</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Web Research 工具链</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部来源引用</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>评测集与失败注入</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>部门 RBAC + 默认 Agent/KB</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>用户权限管理界面</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>知识库文档管理 UI</td><td><span class="status done">完成</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

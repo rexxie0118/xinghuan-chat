@@ -17,7 +17,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
@@ -44,6 +44,7 @@ from .config import Settings
 from .db import connect, init_db, is_integrity_error
 from .observability import AuditLog, new_request_id, request_id_var, user_id_var
 from .knowledge import KnowledgeRegistry, KnowledgeService
+from kb.ingest import SUPPORTED_SUFFIXES
 from .sandbox import build_sandbox_runner
 from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
 from .sandbox.apple_pool import AppleContainerPool
@@ -1654,6 +1655,90 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         user: dict[str, Any] = User,
     ) -> dict[str, Any]:
         return resolve_kb(user, kb_id).overview()
+
+    MAX_KB_UPLOAD = 10 * 1024 * 1024
+
+    def can_manage_kb(user: dict[str, Any], kb_service: KnowledgeService) -> bool:
+        role = str(user.get("role") or "member")
+        if role == "admin":
+            return True
+        return role == "manager" and kb_service.info.department == str(user.get("department") or "")
+
+    @app.get("/api/kb/documents")
+    def kb_documents(
+        kb_id: str = Query(default="", alias="kb", max_length=40),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        service = resolve_kb(user, kb_id)
+        return {
+            "kb": service.info.id,
+            "name": service.info.name,
+            "documents": service.documents(),
+            "can_manage": can_manage_kb(user, service),
+        }
+
+    @app.post("/api/kb/documents")
+    async def upload_kb_document(
+        file: UploadFile = File(...),
+        kb_id: str = Query(default="", alias="kb", max_length=40),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        service = resolve_kb(user, kb_id)
+        if not can_manage_kb(user, service):
+            raise HTTPException(status_code=403, detail="需要管理员或本部门 manager 权限")
+        raw_name = Path(file.filename or "").name.strip()
+        safe_name = re.sub(r"[^\w.\-\u4e00-\u9fff]+", "_", raw_name)[:120]
+        suffix = Path(safe_name).suffix.lower()
+        supported = {str(item).lower() for item in SUPPORTED_SUFFIXES}
+        if not safe_name or suffix not in supported:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的文件类型；允许 {', '.join(sorted(supported))}",
+            )
+        payload = await file.read(MAX_KB_UPLOAD + 1)
+        if len(payload) > MAX_KB_UPLOAD:
+            raise HTTPException(status_code=413, detail="文件超过 10MB")
+        if not payload:
+            raise HTTPException(status_code=400, detail="文件为空")
+        service.knowledge_dir.mkdir(parents=True, exist_ok=True)
+        target = (service.knowledge_dir / safe_name).resolve()
+        try:
+            target.relative_to(service.knowledge_dir)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="非法文件名") from exc
+        target.write_bytes(payload)
+        report = service.ingest_file(target)
+        if report.get("status") == "error":
+            raise HTTPException(status_code=400, detail=report.get("detail") or "解析失败")
+        return {
+            "document": report,
+            "documents": service.documents(),
+            "overview": service.overview(),
+        }
+
+    @app.delete("/api/kb/documents/{doc_id}")
+    def delete_kb_document(
+        doc_id: str,
+        kb_id: str = Query(default="", alias="kb", max_length=40),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        service = resolve_kb(user, kb_id)
+        if not can_manage_kb(user, service):
+            raise HTTPException(status_code=403, detail="需要管理员或本部门 manager 权限")
+        removed = service.delete_document(doc_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail="文档不存在")
+        return {"removed": removed, "documents": service.documents(), "overview": service.overview()}
+
+    @app.post("/api/kb/reindex")
+    def reindex_kb(
+        kb_id: str = Query(default="", alias="kb", max_length=40),
+        user: dict[str, Any] = User,
+    ) -> dict[str, Any]:
+        service = resolve_kb(user, kb_id)
+        if not can_manage_kb(user, service):
+            raise HTTPException(status_code=403, detail="需要管理员或本部门 manager 权限")
+        return {"result": service.reindex(), "overview": service.overview()}
 
     @app.get("/api/kb/graph")
     def kb_graph(

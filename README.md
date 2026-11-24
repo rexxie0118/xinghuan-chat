@@ -52,6 +52,7 @@ python3 -m venv .venv
 - 可观测性：request_id / audit_events / metrics
 - 内置 RAG/ImportedAgent/MCP 适配插件
 - 部门 RBAC：默认 KB + 默认 Agent
+- 知识库文档管理：上传/删除/重建索引
 - Apple Container 预热池：warm/lease/quota
 - 页面内 Docs：迭代记录、Todo、历史架构图
 - Agent 模式执行脚本，展示 stdout / stderr / exit code / 工具轨迹

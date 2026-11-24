@@ -2386,6 +2386,181 @@
     return root;
   }
 
+  async function openKbDocs() {
+    const root = modalShell();
+    const card = document.createElement("div");
+    card.className = "modal-card kb-docs-modal";
+    card.innerHTML = `
+      <div class="kb-docs-head">
+        <div>
+          <p class="eyebrow">KNOWLEDGE DOCUMENTS</p>
+          <h3>知识库文档</h3>
+          <p>上传后立即解析、分块并建立索引；删除会同时移除源文件。</p>
+        </div>
+        <button class="icon-btn kb-docs-close" type="button" aria-label="关闭知识库文档">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div class="kb-docs-toolbar">
+        <select data-kb-select aria-label="知识库"></select>
+        <label class="kb-upload-label" data-kb-upload hidden>
+          上传文档
+          <input type="file" accept=".md,.markdown,.txt,.text,.rst,.pdf,.docx" data-kb-file />
+        </label>
+        <button class="kb-reindex" type="button" data-kb-reindex hidden>重建索引</button>
+      </div>
+      <div class="kb-docs-body">
+        <div class="kb-doc-list"></div>
+        <div class="kb-docs-status"></div>
+      </div>`;
+    root.append(card);
+    const close = () => { root.hidden = true; };
+    card.querySelector(".kb-docs-close").addEventListener("click", close);
+    root.onclick = (event) => { if (event.target === root) close(); };
+    const select = card.querySelector("[data-kb-select]");
+    const list = card.querySelector(".kb-doc-list");
+    const status = card.querySelector(".kb-docs-status");
+    const uploadWrap = card.querySelector("[data-kb-upload]");
+    const fileInput = card.querySelector("[data-kb-file]");
+    const reindexBtn = card.querySelector("[data-kb-reindex]");
+    let kbId = state.kbId || state.defaultKb;
+    let canManage = false;
+
+    for (const kb of state.kbs || []) {
+      const option = document.createElement("option");
+      option.value = kb.id;
+      option.textContent = kb.name;
+      if (kb.id === kbId) option.selected = true;
+      select.append(option);
+    }
+    if (!select.options.length) {
+      list.innerHTML = `<div class="kb-docs-empty">当前账号没有可访问的知识库</div>`;
+      return;
+    }
+    if (!kbId) kbId = select.options[0].value;
+
+    function setStatus(text) {
+      status.textContent = text || "";
+    }
+
+    function render(data) {
+      canManage = Boolean(data.can_manage);
+      uploadWrap.hidden = !canManage;
+      reindexBtn.hidden = !canManage;
+      list.innerHTML = "";
+      if (!data.documents.length) {
+        list.innerHTML = `<div class="kb-docs-empty">这个知识库还没有文档。上传一份 Markdown 开始。</div>`;
+        return;
+      }
+      for (const doc of data.documents) {
+        const row = document.createElement("div");
+        row.className = "kb-doc-row";
+        row.innerHTML = `
+          <div class="kb-doc-title">
+            <strong>${escapeHtml(doc.title)}</strong>
+            <small>${escapeHtml(doc.source_name)}</small>
+          </div>
+          <div class="kb-doc-meta">${escapeHtml(doc.doc_type || "note")}</div>
+          <div class="kb-doc-meta kb-doc-chunks">${formatNumber(doc.chunks)} 块</div>
+          <div class="kb-doc-meta">${escapeHtml((doc.updated_at || "").slice(0, 10))}</div>
+        `;
+        if (canManage) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "kb-doc-delete";
+          button.textContent = "删除";
+          button.addEventListener("click", async () => {
+            if (!confirm(`删除《${doc.title}》及其源文件？`)) return;
+            button.disabled = true;
+            try {
+              await api(`/api/kb/documents/${encodeURIComponent(doc.id)}?kb=${encodeURIComponent(kbId)}`, { method: "DELETE" });
+              toast("文档已删除");
+              await refresh();
+            } catch (err) {
+              toast(err.message, "error");
+              button.disabled = false;
+            }
+          });
+          row.append(button);
+        } else {
+          const span = document.createElement("span");
+          span.className = "kb-doc-meta";
+          span.textContent = "只读";
+          row.append(span);
+        }
+        list.append(row);
+      }
+    }
+
+    async function refresh() {
+      setStatus("加载中…");
+      const data = await api(`/api/kb/documents?kb=${encodeURIComponent(kbId)}`);
+      render(data);
+      setStatus(`共 ${data.documents.length} 篇文档 · ${data.can_manage ? "可管理" : "只读"}`);
+    }
+
+    select.addEventListener("change", async () => {
+      kbId = select.value;
+      try {
+        await refresh();
+      } catch (err) {
+        setStatus(err.message);
+      }
+    });
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append("file", file, file.name);
+      setStatus(`正在上传并解析 ${file.name}…`);
+      try {
+        const res = await fetch(`/api/kb/documents?kb=${encodeURIComponent(kbId)}`, {
+          method: "POST",
+          body: form,
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || "上传失败");
+        toast(`已添加 ${data.document?.title || file.name}`);
+        await refresh();
+        if (kbId === state.kbId) {
+          await loadKbCatalog();
+          await loadOverview();
+        }
+      } catch (err) {
+        setStatus(err.message);
+        toast(err.message, "error");
+      } finally {
+        fileInput.value = "";
+      }
+    });
+
+    reindexBtn.addEventListener("click", async () => {
+      if (!confirm("重新解析当前知识库全部文档？可能耗时较久。")) return;
+      reindexBtn.disabled = true;
+      setStatus("正在重建索引…");
+      try {
+        await api(`/api/kb/reindex?kb=${encodeURIComponent(kbId)}`, { method: "POST" });
+        toast("索引已重建");
+        await refresh();
+        if (kbId === state.kbId) await loadOverview();
+      } catch (err) {
+        setStatus(err.message);
+        toast(err.message, "error");
+      } finally {
+        reindexBtn.disabled = false;
+      }
+    });
+
+    try {
+      await refresh();
+    } catch (err) {
+      setStatus(err.message);
+    }
+  }
+
   async function openAdminUsers() {
     const root = modalShell();
     const card = document.createElement("div");
@@ -3650,6 +3825,11 @@
   // Delegated fallback: the memory entry is also reachable if an earlier
   // binding throws or a stale app.js is cached.
   document.addEventListener("click", (event) => {
+    if (event.target.closest("#kb-docs-btn")) {
+      event.preventDefault();
+      openKbDocs();
+      return;
+    }
     if (event.target.closest("#admin-btn")) {
       event.preventDefault();
       openAdminUsers();

@@ -86,6 +86,22 @@ class ApiTest(unittest.TestCase):
             bad = client.post("/api/tools/not_a_tool/call", json={"arguments": {}})
             self.assertEqual(bad.status_code, 400)
 
+    def test_kb_document_upload_and_delete(self):
+        with TestClient(self.app) as client:
+            self.login(client, "admin", "admin1234")
+            name = "kb-docs-test.md"
+            body = "# 文档管理测试\n\n这是通过 API 上传的测试文档。\n"
+            uploaded = client.post(
+                "/api/kb/documents?kb=common",
+                files={"file": (name, body.encode("utf-8"), "text/markdown")},
+            )
+            self.assertEqual(uploaded.status_code, 200, uploaded.text)
+            docs = uploaded.json()["documents"]
+            row = next(item for item in docs if item["source_name"] == name)
+            deleted = client.delete(f"/api/kb/documents/{row['id']}?kb=common")
+            self.assertEqual(deleted.status_code, 200, deleted.text)
+            self.assertFalse(any(item["id"] == row["id"] for item in deleted.json()["documents"]))
+
     def test_admin_users_endpoint_requires_admin(self):
         with TestClient(self.app) as client:
             self.login(client)
@@ -103,8 +119,10 @@ class ApiTest(unittest.TestCase):
             self.assertIn('id="memory-btn"', page.text)
             self.assertIn('id="connector-btn"', page.text)
             self.assertIn('id="admin-btn"', page.text)
+            self.assertIn('id="kb-docs-btn"', page.text)
             js = client.get("/static/app.js")
             self.assertIn("openAdminUsers", js.text)
+            self.assertIn("openKbDocs", js.text)
             self.assertEqual(js.status_code, 200)
             self.assertIn("openMemoryManager", js.text)
             self.assertIn("openConnectorManager", js.text)
