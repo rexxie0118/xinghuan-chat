@@ -531,6 +531,27 @@ HTTP server：
 
 registry、调用层和 LLM Tool Loop 已经打通；有工具时 Agent 模式会自动选择并调用。
 
+MCP 分片/连接池：
+
+```json
+{
+  "servers": {
+    "github": {
+      "transport": "http",
+      "urls": ["http://10.0.0.11:9000/mcp", "http://10.0.0.12:9000/mcp"],
+      "shards": 2,
+      "allow_tools": ["search_code"]
+    }
+  }
+}
+```
+
+- `shards` / `pool_size`：每个 server 的独立 MCP session 数，最多 8；
+- `urls`：HTTP 分片地址，按 round-robin 分配；
+- stdio 也可用 `shards` 启动多个子进程；
+- 某个分片失败时自动 failover 到下一个；
+- `GET /api/tools` 的 server 状态包含 `shards / calls / failures`。
+
 安全边界：
 
 - `allow_tools` 是白名单，默认 `["*"]` 仅用于本地受信配置；
@@ -1027,9 +1048,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配、MCP 连接池/分片。
 
-> 当前共 57 项测试，全部通过。
+> 当前共 59 项测试，全部通过。
 
 ---
 

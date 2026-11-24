@@ -1,0 +1,108 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-24-02</div>
+    <h1>MCP 连接池与分片</h1>
+    <p class="lede">
+      每个 MCP server 现在可以有多个独立 session：round-robin 分流，
+      单个 shard 失败自动 failover，并在 /api/tools 暴露 shards/calls/failures。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：59 项通过</span>
+      <span>架构：v14</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>配置</h2>
+    <pre class="record-pre">{
+  "servers": {
+    "github": {
+      "transport": "http",
+      "urls": ["http://10.0.0.11:9000/mcp", "http://10.0.0.12:9000/mcp"],
+      "shards": 2,
+      "allow_tools": ["search_code"]
+    }
+  }
+}</pre>
+    <ul>
+      <li><code>shards</code> / <code>pool_size</code>：1-8；</li>
+      <li>HTTP 用 <code>urls</code> 指定不同分片地址；</li>
+      <li>stdio 同一配置启动多个子进程；</li>
+      <li>工具发现取第一个健康 shard；</li>
+      <li>调用按 round-robin，失败切换下一个。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">FakeClient round-robin
+→ a:1
+→ b:2
+
+bad shard + good shard
+→ failover to good
+→ failures=1
+
+59 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>分片是可重试的独立 session；有副作用的工具仍可能重复执行。</li>
+      <li>没有后台健康检查/自动重建，只在调用失败时切换。</li>
+      <li>工具发现只取第一个健康 shard，不合并异构工具集。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-24-mcp-pool.svg" alt="v14 MCP pool" />
+      <figcaption>v14：ToolRegistry → MCPClientPool → shards；失败自动切换。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">18 项完成，9 项待办。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>MCP Client 与 Tool Registry</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 一次性执行 runner</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>AgentKernel + trusted plugin hooks</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Docs 入口 + 迭代记录/Todo + 历史架构图</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>Apple Container 常驻运行时管理器</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>per-user / per-session 容器与 workspace 映射</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>空闲回收与 checkpoint 恢复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>失败分类、重试、熔断、checkpoint、取消</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>内部 Plugin API 与 manifest</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>真正的 Tool Loop</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>token 级上下文预算</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>用户级长期记忆</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>macOS 26 真实 Apple Container 测试</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>会话记忆提取与管理 UI</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>记忆 UI 缓存/入口修复</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P0</td><td>高并发请求队列、信号量、背压、取消、超时</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Postgres + Redis/Queue + 对象存储，拆分 Web 与 Worker</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>MCP 连接池/分片</td><td><span class="status done">完成</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 预热池与并发配额</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>迁移 RAG / ImportedAgent / MCP 到内部插件</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>插件权限与信任模型</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Apple Container 网络与安全策略</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>MCP 权限与安全</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>统一工具结果处理</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>外部 Agent 接 MCP/ReAct</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>评测集与失败注入</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>可观测性与审计</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下一步</h2>
+    <p>Apple Container 预热池与并发配额：减少冷启动，按用户/租户限制容器数量。</p>
+  </section>
+</article>

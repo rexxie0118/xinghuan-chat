@@ -42,6 +42,7 @@ python3 -m venv .venv
 - 记忆管理 UI：查看/筛选/添加/删除
 - 并发准入：全局/用户 semaphore、队列、429 背压、运行超时
 - Postgres / Redis Worker / S3 对象存储适配
+- MCP 连接池/分片：round-robin + failover
 - 页面内 Docs：迭代记录、Todo、历史架构图
 - Agent 模式执行脚本，展示 stdout / stderr / exit code / 工具轨迹
 - RAG 混合检索 + 本体图谱 + 引用回查

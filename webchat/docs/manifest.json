@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-24-02",
+      "title": "MCP 连接池与分片",
+      "date": "2026-11-24",
+      "summary": "每个 MCP server 支持多个独立 session，round-robin 分流、失败 failover，并暴露 shards/calls/failures。",
+      "record": "iterations/2026-11-24-02.html",
+      "diagrams": [
+        "architecture/2026-11-24-mcp-pool.svg"
+      ]
+    },
+    {
       "id": "2026-11-24-01",
       "title": "Postgres + Redis/Queue + 对象存储",
       "date": "2026-11-24",
@@ -241,6 +251,13 @@
       "date": "2026-11-24",
       "src": "architecture/2026-11-24-web-worker-split.svg",
       "note": "Postgres/Redis/Worker/S3 适配已落地；普通聊天 SSE 仍在 Web 进程。"
+    },
+    {
+      "id": "2026-11-24-v14",
+      "label": "v14 · MCP Pool",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-mcp-pool.svg",
+      "note": "MCP shard pool + failover 已落地；无后台健康重建。"
     }
   ]
 }

@@ -418,13 +418,78 @@ def _normalize_content(result: dict[str, Any]) -> tuple[str, Any]:
     return text, structured
 
 
+
+class MCPClientPool:
+    """A small, failover-capable pool for one MCP server.
+
+    Each shard is an independent MCP session/process. Calls are round-robin;
+    if one shard fails, the next shard gets the call. Tool discovery uses the
+    first healthy shard (replicas are expected to expose the same tools).
+    """
+
+    def __init__(self, server: str, clients: list[MCPClient]) -> None:
+        self.server = server
+        self.clients = clients
+        self._index = 0
+        self._lock = threading.RLock()
+        self.calls = 0
+        self.failures = 0
+
+    def __len__(self) -> int:
+        return len(self.clients)
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        last: Exception | None = None
+        for client in self.clients:
+            try:
+                return client.list_tools()
+            except Exception as exc:  # noqa: BLE001
+                last = exc
+        raise ToolError(f"MCP {self.server} 所有分片都不可用：{last}")
+
+    def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            start = self._index
+            self._index = (self._index + 1) % max(1, len(self.clients))
+            self.calls += 1
+        last: Exception | None = None
+        for offset in range(len(self.clients)):
+            client = self.clients[(start + offset) % len(self.clients)]
+            try:
+                return client.call_tool(name, arguments)
+            except Exception as exc:  # noqa: BLE001 - fail over to next shard
+                last = exc
+                self.failures += 1
+                LOG.warning(
+                    "MCP shard failed: server=%s client=%s error=%s",
+                    self.server,
+                    getattr(client, "name", "?"),
+                    type(exc).__name__,
+                )
+        raise ToolError(f"MCP {self.server} 所有分片都失败：{last}")
+
+    def public(self) -> dict[str, Any]:
+        return {
+            "shards": len(self.clients),
+            "calls": self.calls,
+            "failures": self.failures,
+        }
+
+    def close(self) -> None:
+        for client in self.clients:
+            try:
+                client.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self.clients = []
+
 class ToolRegistry:
     """Discovers MCP tools and enforces the configured allowlist."""
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self.config = config or {}
         self.servers = self.config.get("servers") or {}
-        self._clients: dict[str, MCPClient] = {}
+        self._clients: dict[str, MCPClientPool] = {}
         self._specs: dict[str, ToolSpec] = {}
         self._status: dict[str, dict[str, Any]] = {}
         self._handlers: dict[str, Any] = {}
@@ -446,21 +511,45 @@ class ToolRegistry:
                 self._status[server_name] = status
                 if not status["enabled"]:
                     continue
-                client: MCPClient | None = None
+                clients: list[MCPClient] = []
                 try:
                     transport = status["transport"].lower()
-                    if transport == "stdio":
-                        client = StdioMCPClient(server_name, raw_config)
-                    elif transport in {"http", "https", "streamable-http"}:
-                        client = HttpMCPClient(server_name, raw_config)
-                    else:
-                        raise ToolError(f"不支持的 MCP transport：{transport}")
-                    client.initialize()
+                    shards = int(raw_config.get("shards") or raw_config.get("pool_size") or 1)
+                    shards = max(1, min(shards, 8))
+                    urls = raw_config.get("urls") or []
+                    tools: list[dict[str, Any]] = []
+                    for shard in range(shards):
+                        shard_config = dict(raw_config)
+                        if urls:
+                            shard_config["url"] = urls[shard % len(urls)]
+                        if transport == "stdio":
+                            client = StdioMCPClient(server_name, shard_config)
+                        elif transport in {"http", "https", "streamable-http"}:
+                            client = HttpMCPClient(server_name, shard_config)
+                        else:
+                            raise ToolError(f"不支持的 MCP transport：{transport}")
+                        try:
+                            client.initialize()
+                            if not tools:
+                                tools = client.list_tools()
+                            clients.append(client)
+                        except Exception as exc:  # noqa: BLE001
+                            try:
+                                client.close()
+                            except Exception:  # noqa: BLE001
+                                pass
+                            LOG.warning(
+                                "MCP shard unavailable: server=%s shard=%s error=%s",
+                                server_name,
+                                shard,
+                                exc,
+                            )
+                    if not clients:
+                        raise ToolError("所有 MCP 分片都不可用")
                     raw_allowed = raw_config.get("allow_tools") or ["*"]
                     if isinstance(raw_allowed, str):
                         raw_allowed = [raw_allowed]
                     allowed = {str(x) for x in raw_allowed}
-                    tools = client.list_tools()
                     for tool in tools:
                         raw_name = str(tool.get("name") or "")
                         if not raw_name:
@@ -477,12 +566,14 @@ class ToolRegistry:
                             timeout=float(raw_config.get("timeout") or 10),
                             dangerous=bool(raw_config.get("dangerous")),
                         )
-                    self._clients[server_name] = client
+                    pool = MCPClientPool(server_name, clients)
+                    self._clients[server_name] = pool
                     status["connected"] = True
                     status["tools"] = len(tools)
+                    status["shards"] = len(clients)
                 except Exception as exc:  # noqa: BLE001
                     status["error"] = f"{type(exc).__name__}: {exc}"
-                    if client is not None:
+                    for client in clients:
                         try:
                             client.close()
                         except Exception:  # noqa: BLE001
@@ -592,7 +683,17 @@ class ToolRegistry:
     def summary(self) -> dict[str, Any]:
         return {
             "enabled": any(status.get("connected") for status in self._status.values()),
-            "servers": sorted(self._status.values(), key=lambda s: s["name"]),
+            "servers": [
+                {
+                    **status,
+                    **(
+                        self._clients[status["name"]].public()
+                        if status["name"] in self._clients
+                        else {}
+                    ),
+                }
+                for status in sorted(self._status.values(), key=lambda s: s["name"])
+            ],
             "tools": [spec.public() for spec in self.list_tools()],
         }
 
