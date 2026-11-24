@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import re
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 SCHEMA = [
     """
@@ -142,7 +145,93 @@ SCHEMA = [
 ]
 
 
-def connect(path: Path | str) -> sqlite3.Connection:
+DB_URL_ENV = "WEBCHAT_DB_URL"
+
+
+def is_integrity_error(exc: BaseException) -> bool:
+    if isinstance(exc, sqlite3.IntegrityError):
+        return True
+    try:
+        import psycopg
+        return isinstance(exc, psycopg.errors.UniqueViolation)
+    except Exception:  # pragma: no cover - optional driver
+        return False
+
+
+def _pg_sql(sql: str) -> str:
+    # The repository intentionally uses SQLite-style qmark placeholders; this
+    # translation keeps both backends on one SQL surface.
+    return sql.replace("?", "%s")
+
+
+class _PgCursor:
+    def __init__(self, cursor: Any) -> None:
+        self._cursor = cursor
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+    @property
+    def rowcount(self) -> int:
+        return int(getattr(self._cursor, "rowcount", -1))
+
+
+class PgConnection:
+    """Small DB-API facade over psycopg with dict rows.
+
+    Code uses only ``execute`` / ``executemany`` / ``with conn`` / row mapping,
+    so this wrapper keeps the existing repository unchanged.
+    """
+
+    is_postgres = True
+
+    def __init__(self, dsn: str) -> None:
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as exc:  # pragma: no cover - optional infra
+            raise RuntimeError(
+                "使用 WEBCHAT_DB_URL=postgresql:// 需要安装 psycopg[binary]"
+            ) from exc
+        self._raw = psycopg.connect(dsn, row_factory=dict_row)
+
+    def execute(self, sql: str, params: Any = ()) -> _PgCursor:
+        return _PgCursor(self._raw.execute(_pg_sql(sql), params))
+
+    def executemany(self, sql: str, seq: Any) -> _PgCursor:
+        return _PgCursor(self._raw.executemany(_pg_sql(sql), seq))
+
+    def __enter__(self):
+        self._raw.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._raw.__exit__(exc_type, exc, tb)
+
+    def commit(self) -> None:
+        self._raw.commit()
+
+    def rollback(self) -> None:
+        self._raw.rollback()
+
+    def close(self) -> None:
+        self._raw.close()
+
+
+def database_url() -> str:
+    return (os.getenv(DB_URL_ENV) or "").strip()
+
+
+def connect(path: Path | str) -> Any:
+    dsn = database_url()
+    if dsn.startswith(("postgres://", "postgresql://")):
+        return PgConnection(dsn)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), timeout=10)
@@ -153,8 +242,15 @@ def connect(path: Path | str) -> sqlite3.Connection:
     return conn
 
 
-def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
-    existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+def _ensure_columns(conn: Any, table: str, columns: dict[str, str]) -> None:
+    if getattr(conn, "is_postgres", False):
+        rows = conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name=?",
+            (table,),
+        ).fetchall()
+        existing = {row["column_name"] for row in rows}
+    else:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
     for name, ddl in columns.items():
         if name not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")

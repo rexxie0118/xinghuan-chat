@@ -85,6 +85,13 @@ class Settings:
     max_queue: int = 32
     queue_timeout: float = 30.0
     run_timeout: float = 180.0
+    queue_url: str = ""
+    queue_name: str = "webchat:jobs"
+    object_store: str = "local"
+    s3_bucket: str = ""
+    s3_prefix: str = "artifacts"
+    s3_endpoint: str = ""
+    s3_region: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -144,6 +151,13 @@ class Settings:
             max_queue=int(os.getenv("WEBCHAT_MAX_QUEUE", "32")),
             queue_timeout=float(os.getenv("WEBCHAT_QUEUE_TIMEOUT_SECONDS", "30")),
             run_timeout=float(os.getenv("WEBCHAT_RUN_TIMEOUT_SECONDS", "180")),
+            queue_url=(os.getenv("WEBCHAT_QUEUE_URL") or "").strip(),
+            queue_name=(os.getenv("WEBCHAT_QUEUE_NAME") or "webchat:jobs").strip(),
+            object_store=(os.getenv("WEBCHAT_OBJECT_STORE") or "local").strip(),
+            s3_bucket=(os.getenv("WEBCHAT_S3_BUCKET") or "").strip(),
+            s3_prefix=(os.getenv("WEBCHAT_S3_PREFIX") or "artifacts").strip(),
+            s3_endpoint=(os.getenv("WEBCHAT_S3_ENDPOINT") or "").strip(),
+            s3_region=(os.getenv("WEBCHAT_S3_REGION") or "").strip(),
         )
         settings.ensure_dirs()
         return settings

@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..artifacts import LocalArtifactStore
+from ..object_store import build_artifact_store
 from . import RunRequest, RunResult
 from .local import MAX_OUTPUT_CHARS, _truncate
 
@@ -41,7 +41,7 @@ class AppleContainerRunner:
 
     def __init__(self, settings: Any) -> None:
         self.settings = settings
-        self.artifacts = LocalArtifactStore(settings.data_dir)
+        self.artifacts = build_artifact_store(settings)
         self.binary = str(
             getattr(settings, "apple_container_bin", None) or "container"
         )

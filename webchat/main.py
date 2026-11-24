@@ -22,7 +22,8 @@ from pydantic import BaseModel, Field
 
 from . import repository as repo
 from .agent import AgentRunner
-from .artifacts import LocalArtifactStore, owns_run, record_run
+from .artifacts import owns_run, record_run
+from .object_store import build_artifact_store
 from .agent_defs import (
     agent_detail,
     build_agent,
@@ -32,9 +33,10 @@ from .agent_defs import (
     save_agent,
 )
 from .github_importer import GitHubImportError, import_from_github
+from .jobs import RedisJobQueue, new_job
 from .concurrency import ConcurrencyGate, QueueFullError, QueueTimeoutError
 from .config import Settings
-from .db import connect, init_db
+from .db import connect, init_db, is_integrity_error
 from .knowledge import KnowledgeRegistry, KnowledgeService
 from .sandbox import build_sandbox_runner
 from .sandbox.apple_runtime import AppleContainerRuntime, ContainerRuntimeError
@@ -119,6 +121,12 @@ class MemoryIn(BaseModel):
     predicate: str = Field(default="", max_length=80)
     object_text: str = Field(default="", max_length=300)
     importance: float = Field(default=0.7, ge=0, le=1)
+
+
+class JobIn(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+    mode: Literal["rag", "agent"] = "agent"
+    agent_id: str | None = Field(default=None, max_length=80)
 
 
 class RuntimeRestoreIn(BaseModel):
@@ -237,6 +245,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     runner = AgentRunner(settings, sandbox, tools, memory_store=memory_store)
     kernel = AgentKernel(settings, runner)
     plugin_host = load_plugin_host(settings, kernel, tools)
+    job_queue = None
+    if settings.queue_url:
+        job_queue = RedisJobQueue(settings.queue_url, name=settings.queue_name)
 
     conn = connect(settings.db_path)
     try:
@@ -300,6 +311,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.kernel = kernel
     app.state.tools = tools
     app.state.plugin_host = plugin_host
+    app.state.job_queue = job_queue
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -388,6 +400,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "tools": tools.summary(),
             "plugins": plugin_host.summary(),
             "concurrency": gate.metrics().public(),
+            "queue": {"enabled": job_queue is not None, "name": settings.queue_name},
             "kb": {
                 "provider": default_service.provider.kind,
                 "chat_model": getattr(
@@ -433,7 +446,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     password_hash=hash_password(payload.password),
                     department=department,
                 )
-            except sqlite3.IntegrityError as exc:
+            except Exception as exc:  # unique violation across SQLite/Postgres
+                if not is_integrity_error(exc):
+                    raise
                 raise HTTPException(status_code=409, detail="这个用户名已被占用") from exc
             token = _new_session(db, user["id"], settings)
         finally:
@@ -508,6 +523,71 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not memory_store.forget(user["id"], memory_id):
             raise HTTPException(status_code=404, detail="记忆不存在")
         return {"ok": True}
+
+    @app.post("/api/jobs/agent/{conversation_id}")
+    def enqueue_agent_job_for_conversation(
+        conversation_id: str, payload: JobIn, user: dict[str, Any] = User
+    ) -> dict[str, Any]:
+        if job_queue is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Worker 队列未启用；请配置 WEBCHAT_QUEUE_URL",
+            )
+        content = payload.content.strip()
+        if not content:
+            raise HTTPException(status_code=400, detail="消息不能为空")
+        db = connect(settings.db_path)
+        try:
+            conversation = repo.get_conversation(
+                db, conversation_id=conversation_id, user_id=user["id"]
+            )
+            if conversation is None:
+                raise HTTPException(status_code=404, detail="会话不存在")
+            service = resolve_kb(user, conversation["kb_id"])
+            imported_agent = None
+            if payload.agent_id and payload.mode == "agent":
+                imported_agent = get_agent(db, payload.agent_id, user["id"])
+                if imported_agent is None:
+                    raise HTTPException(status_code=404, detail="Agent 不存在或不属于你")
+            user_message = repo.add_message(
+                db,
+                conversation_id=conversation_id,
+                user_id=user["id"],
+                role="user",
+                content=content,
+                meta={"mode": payload.mode, "agent_id": payload.agent_id, "queued": True},
+            )
+            repo.auto_title_if_needed(
+                db,
+                conversation_id=conversation_id,
+                user_id=user["id"],
+                first_user_text=content,
+            )
+        finally:
+            db.close()
+        job = new_job(
+            user["id"],
+            conversation_id,
+            kind="agent_run",
+            payload={
+                "content": content,
+                "mode": payload.mode,
+                "agent_id": payload.agent_id or "",
+                "user_message_id": user_message["id"],
+                "kb_id": service.info.id,
+            },
+        )
+        job_queue.enqueue(job)
+        return {"job": job.public(), "user_message": user_message}
+
+    @app.get("/api/jobs/{job_id}")
+    def get_job(job_id: str, user: dict[str, Any] = User) -> dict[str, Any]:
+        if job_queue is None:
+            raise HTTPException(status_code=503, detail="Worker 队列未启用")
+        job = job_queue.get(job_id)
+        if job is None or job.user_id != user["id"]:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        return {"job": job.public()}
 
     # ------------------------------------------------------------- runtimes
 
@@ -672,7 +752,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(status_code=404, detail="产物不存在")
         finally:
             db.close()
-        path = LocalArtifactStore(settings.data_dir).path_for(run_id, name)
+        path = build_artifact_store(settings).path_for(run_id, name)
         if path is None:
             raise HTTPException(status_code=404, detail="产物不存在")
         return FileResponse(

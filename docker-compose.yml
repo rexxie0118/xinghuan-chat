@@ -1,0 +1,105 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: xinghuan
+      POSTGRES_USER: xinghuan
+      POSTGRES_PASSWORD: change-me
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xinghuan -d xinghuan"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: xinghuan
+      MINIO_ROOT_PASSWORD: change-me-minio
+    volumes:
+      - miniodata:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 xinghuan change-me-minio; do sleep 1; done;
+      mc mb -p local/xinghuan || true;
+      mc anonymous set private local/xinghuan || true;
+      "
+
+  web:
+    build: .
+    command: ["python", "-m", "webchat", "--host", "0.0.0.0", "--port", "8787"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      WEBCHAT_HOST: 0.0.0.0
+      WEBCHAT_DATA_DIR: /data
+      WEBCHAT_DB_URL: postgresql://xinghuan:change-me@postgres:5432/xinghuan
+      WEBCHAT_QUEUE_URL: redis://redis:6379/0
+      WEBCHAT_OBJECT_STORE: s3
+      WEBCHAT_S3_BUCKET: xinghuan
+      WEBCHAT_S3_ENDPOINT: http://minio:9000
+      WEBCHAT_S3_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: xinghuan
+      AWS_SECRET_ACCESS_KEY: change-me-minio
+      WEBCHAT_SANDBOX: local
+    ports:
+      - "8787:8787"
+    volumes:
+      - appdata:/data
+
+  worker:
+    build: .
+    command: ["python", "-m", "webchat.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      WEBCHAT_DATA_DIR: /data
+      WEBCHAT_DB_URL: postgresql://xinghuan:change-me@postgres:5432/xinghuan
+      WEBCHAT_QUEUE_URL: redis://redis:6379/0
+      WEBCHAT_OBJECT_STORE: s3
+      WEBCHAT_S3_BUCKET: xinghuan
+      WEBCHAT_S3_ENDPOINT: http://minio:9000
+      WEBCHAT_S3_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: xinghuan
+      AWS_SECRET_ACCESS_KEY: change-me-minio
+      WEBCHAT_SANDBOX: local
+    volumes:
+      - appdata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  appdata:

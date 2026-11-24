@@ -1,7 +1,17 @@
 {
   "product": "星环 Chat",
-  "updated_at": "2026-11-23",
+  "updated_at": "2026-11-24",
   "iterations": [
+    {
+      "id": "2026-11-24-01",
+      "title": "Postgres + Redis/Queue + 对象存储",
+      "date": "2026-11-24",
+      "summary": "增加可选 Postgres、Redis Worker、S3 artifact store 和 docker-compose；queued agent_run 可在独立 Worker 执行。",
+      "record": "iterations/2026-11-24-01.html",
+      "diagrams": [
+        "architecture/2026-11-24-web-worker-split.svg"
+      ]
+    },
     {
       "id": "2026-11-23-12",
       "title": "并发准入、队列与背压",
@@ -224,6 +234,13 @@
       "date": "2026-11-23",
       "src": "architecture/2026-11-23-concurrency-gate.svg",
       "note": "单进程内有界并发、背压与超时已落地；跨进程 Worker 仍待做。"
+    },
+    {
+      "id": "2026-11-24-v13",
+      "label": "v13 · Web / Worker Split",
+      "date": "2026-11-24",
+      "src": "architecture/2026-11-24-web-worker-split.svg",
+      "note": "Postgres/Redis/Worker/S3 适配已落地；普通聊天 SSE 仍在 Web 进程。"
     }
   ]
 }

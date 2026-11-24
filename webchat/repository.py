@@ -164,7 +164,7 @@ def list_conversations(
         SELECT c.*,
                (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count,
                (SELECT m.content FROM messages m WHERE m.conversation_id = c.id
-                ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1) AS last_message
+                ORDER BY m.created_at DESC LIMIT 1) AS last_message
         FROM conversations c
         WHERE {where}
         ORDER BY c.updated_at DESC
@@ -188,7 +188,7 @@ def get_conversation(
         SELECT c.*,
                (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count,
                (SELECT m.content FROM messages m WHERE m.conversation_id = c.id
-                ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1) AS last_message
+                ORDER BY m.created_at DESC LIMIT 1) AS last_message
         FROM conversations c
         WHERE c.id = ? AND c.user_id = ?
         """,
@@ -314,7 +314,7 @@ def list_messages(
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM messages WHERE conversation_id = ? AND user_id = ?"
-        " ORDER BY created_at ASC, rowid ASC",
+        " ORDER BY created_at ASC",
         (conversation_id, user_id),
     ).fetchall()
     return [_message(row) for row in rows]
@@ -325,7 +325,7 @@ def conversation_context(
 ) -> list[dict[str, str]]:
     rows = conn.execute(
         "SELECT role, content FROM messages WHERE conversation_id = ? AND user_id = ?"
-        " ORDER BY created_at DESC, rowid DESC LIMIT ?",
+        " ORDER BY created_at DESC LIMIT ?",
         (conversation_id, user_id, limit),
     ).fetchall()
     return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]

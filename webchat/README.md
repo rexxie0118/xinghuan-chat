@@ -720,6 +720,54 @@ webchat/docs/architecture/<date>-*.svg    当前架构图
 
 规则见 [`webchat/docs/README.md`](docs/README.md)。
 
+### Postgres / Redis / Worker / S3
+
+这是可选的生产化层。安装：
+
+```bash
+pip install -r requirements-infra.txt
+```
+
+配置：
+
+```dotenv
+WEBCHAT_DB_URL=postgresql://xinghuan:change-me@127.0.0.1:5432/xinghuan
+WEBCHAT_QUEUE_URL=redis://127.0.0.1:6379/0
+WEBCHAT_OBJECT_STORE=s3
+WEBCHAT_S3_BUCKET=xinghuan
+WEBCHAT_S3_ENDPOINT=http://127.0.0.1:9000
+```
+
+拆分：
+
+```bash
+# Web
+python -m webchat --host 0.0.0.0 --port 8787
+
+# Worker
+python -m webchat.worker
+```
+
+Web 只负责 API/SSE 和入队；Worker 消费 Redis 中的 `agent_run` job，执行 Agent 并写回共享数据库。
+
+队列 API：
+
+```http
+POST /api/jobs/agent/{conversation_id}
+GET  /api/jobs/{job_id}
+```
+
+本地无 Redis 时队列 API 返回 `503`，普通聊天仍使用进程内执行。
+
+对象存储：
+
+```text
+WEBCHAT_OBJECT_STORE=local   # data/artifacts
+WEBCHAT_OBJECT_STORE=s3      # S3 / MinIO / R2 兼容
+```
+
+知识库检索库仍是 SQLite 文件；Postgres 当前用于 WebChat 控制面。完整容器化示例见 `docker-compose.yml`。
+
 ### 并发准入与背压
 
 内容入口现在经过 `ConcurrencyGate`：
@@ -979,9 +1027,9 @@ cd xinghuan-chat
 .venv/bin/python -m unittest discover -s webchat/tests -v
 ```
 
-覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列。
+覆盖：登录 / 错误密码 / 登出、注册校验、部门知识库访问控制、知识库维度的会话隔离、SSE 流式回答与持久化、自动标题、双账号会话隔离、多轮历史进入提示词 / 追问检索、知识图谱与实体详情、Agent/Skill 导入、嵌套脚本路径、GitHub URL 解析、脚本执行 / 产物下载 / 用户隔离 / Pipeline 标志与 HTML 提取 / 导入测试预检、MCP stdio/HTTP 工具发现与调用、空工具配置 API、Apple Container 执行与产物、AgentKernel hook bus/plugin 生命周期、docs 静态站点、Apple Container 常驻运行时命名/契约、per-user 运行时/workspace 映射、checkpoint、idle reaper、失败分类/重试/熔断/取消、trusted plugin manifest/loader、LLM tool loop、token 级上下文预算、用户级长期记忆、记忆管理 UI、准入控制/并发队列、Postgres/Redis/Worker/S3 适配。
 
-> 当前共 53 项测试，全部通过。
+> 当前共 57 项测试，全部通过。
 
 ---
 

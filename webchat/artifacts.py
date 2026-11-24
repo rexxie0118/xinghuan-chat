@@ -91,8 +91,12 @@ def record_run(
 
     with conn:
         conn.execute(
-            "INSERT OR REPLACE INTO agent_runs(id, user_id, agent_id, agent_name,"
-            " created_at, execution_json) VALUES(?,?,?,?,?,?)",
+            "INSERT INTO agent_runs(id, user_id, agent_id, agent_name,"
+            " created_at, execution_json) VALUES(?,?,?,?,?,?)"
+            " ON CONFLICT(id) DO UPDATE SET"
+            " user_id=excluded.user_id, agent_id=excluded.agent_id,"
+            " agent_name=excluded.agent_name, created_at=excluded.created_at,"
+            " execution_json=excluded.execution_json",
             (run_id, user_id, agent_id, agent_name, iso(), json.dumps(execution, ensure_ascii=False)),
         )
 

@@ -62,6 +62,17 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.text)
         return resp.json()["user"]
 
+    def test_queue_endpoint_requires_worker_queue(self):
+        with TestClient(self.app) as client:
+            self.login(client)
+            conv = client.post("/api/conversations", json={"mode": "agent"}).json()["conversation"]
+            resp = client.post(
+                f"/api/jobs/agent/{conv['id']}",
+                json={"content": "hi", "mode": "agent"},
+            )
+            self.assertEqual(resp.status_code, 503)
+            client.delete(f"/api/conversations/{conv['id']}")
+
     def test_tools_endpoint_without_mcp_config(self):
         with TestClient(self.app) as client:
             self.login(client)
