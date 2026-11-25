@@ -618,8 +618,13 @@ class AgentRunner:
         for index, hit in enumerate(hits, 1):
             text = " ".join((hit.get("text") or "").split())[:1000]
             heading = f" › {hit.get('heading_path')}" if hit.get("heading_path") else ""
+            effective = (
+                f"（生效 {hit.get('effective_date')}）"
+                if hit.get("effective_date")
+                else ""
+            )
             evidence.append(
-                f"[{index}] 《{hit.get('doc_title', '')}》{heading}\n{text}"
+                f"[{index}] 《{hit.get('doc_title', '')}》{heading}{effective}\n{text}"
             )
         graph = result.get("graph", {}) or {}
         graph_names = "、".join(
@@ -631,6 +636,8 @@ class AgentRunner:
             "能直接用知识库证据回答时不要调用工具；需要外部工具时再调用。"
             "每个关键结论后用 [编号] 标注知识库或工具来源；不要编造来源。"
             "外部来源必须使用工具结果里给出的 URL 和编号。"
+            "如果证据里同一制度有多个版本，默认采用生效日期最新的一版；"
+            "只有用户明确询问历史、旧版或变化时，才引用旧版。"
             "用中文简洁回答。"
         )
         history_text = "\n".join(
@@ -1371,12 +1378,19 @@ class AgentRunner:
                 if hit.get("heading_path")
                 else ""
             )
+            effective = (
+                f"（生效 {hit.get('effective_date')}）"
+                if hit.get("effective_date")
+                else ""
+            )
             evidence.append(
-                f"[{index}] 《{hit.get('doc_title', '')}》{heading}\n{text}"
+                f"[{index}] 《{hit.get('doc_title', '')}》{heading}{effective}\n{text}"
             )
         system = (
             "你正在执行一个可复用的 Skill。严格遵循下面的 Skill 指令；"
-            "只根据提供的知识库证据回答，不要编造事实。引用证据时使用 [编号]。\n\n"
+            "只根据提供的知识库证据回答，不要编造事实。引用证据时使用 [编号]。"
+            "同一制度有多个版本时，默认采用生效日期最新的一版；"
+            "用户明确问历史/旧版时才引用旧版。\n\n"
             f"# Skill: {agent.name}\n{agent.markdown}"
         )
         if force_html:

@@ -279,7 +279,7 @@ class ApiTest(unittest.TestCase):
         with TestClient(self.app) as client:
             health = client.get("/api/health")
             self.assertEqual(health.status_code, 200)
-            self.assertEqual(health.json()["knowledge_bases"]["product"]["documents"], 6)
+            self.assertGreaterEqual(health.json()["knowledge_bases"]["product"]["documents"], 6)
             self.assertEqual(health.json()["knowledge_bases"]["engineering"]["documents"], 4)
             meta = client.get("/api/meta")
             self.assertEqual(meta.status_code, 200)

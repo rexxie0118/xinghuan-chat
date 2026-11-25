@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-25-03",
+      "title": "制度版本优先级：最新生效月胜出",
+      "date": "2026-11-25",
+      "summary": "年假制度新旧两版并存时，按生效月只保留最新；政策优先于 FAQ。",
+      "record": "iterations/2026-11-25-03.html",
+      "diagrams": [
+        "architecture/2026-11-25-policy-versions.svg"
+      ]
+    },
+    {
       "id": "2026-11-25-02",
       "title": "顶栏清理：移除重复模式切换与引擎标签",
       "date": "2026-11-25",
@@ -836,6 +846,13 @@
       "date": "2026-11-25",
       "src": "architecture/2026-11-25-mode-cleanup.svg",
       "note": "模式切换只在输入框区域；顶栏只保留知识面板。"
+    },
+    {
+      "id": "2026-11-25-v49",
+      "label": "v49 · Policy Versions",
+      "date": "2026-11-25",
+      "src": "architecture/2026-11-25-policy-versions.svg",
+      "note": "制度文档按生效月选择最新版本；历史查询保留旧版。"
     }
   ]
 }

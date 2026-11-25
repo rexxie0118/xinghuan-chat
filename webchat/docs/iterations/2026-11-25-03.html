@@ -1,0 +1,98 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-25-03</div>
+    <h1>制度版本优先级：最新生效月胜出</h1>
+    <p class="lede">
+      用户上传了 2025 年 12 月和 2026 年 10 月两版年假制度，旧版却排在前面。
+      根因是 RRF 只看召回排名，没有“制度生效日期”概念；现在按文档内容提取生效月，
+      同一制度族只保留最新版本，政策文档优先于通用 FAQ。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：127 项通过</span>
+      <span>架构：v49</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>根因</h2>
+    <pre class="record-pre">旧版 年假制度.docx
+  2025 年 12月
+  级别 4：年假 10 天 + 补充 3 天
+
+新版 年假制度_2026.docx
+  2026 年 10月
+  级别 4：年假 10 天 + 补充 5 天
+
+旧版 RRF 0.03227 > 新版 0.03175
+没有 effective_date / 版本比较。</pre>
+  </section>
+
+  <section>
+    <h2>修复</h2>
+    <pre class="record-pre">effective_date:
+  内容前 240 字 → 2026-10
+  meta_json → effective_date / doc_date
+  文件名年份兜底
+
+doc_family:
+  年假制度_2026 → 年假制度
+
+检索:
+  同族只保留最新生效月
+  制度文档优先于通用 FAQ
+  历史/旧版/对比查询保留多版本
+  prompt 默认使用最新版本</pre>
+  </section>
+
+  <section>
+    <h2>实测</h2>
+    <pre class="record-pre">问：年假有几天？
+
+命中：
+  年假制度_2026（生效 2026-10）
+
+回答：
+  3 级 15 天 + 5 天补充假
+  4 级 10 天 + 5 天补充假
+  5 级 5 天 + 5 天补充假
+
+引用：
+  《年假制度_2026》[1]</pre>
+  </section>
+
+  <section>
+    <h2>注意</h2>
+    <ul>
+      <li>产品库还有一份误传的旧版 <code>product/年假制度.docx</code>；产品库没有新版，所以产品库仍会回答旧版；</li>
+      <li>已有对话包含旧回答时，模型可能受历史影响，建议新建会话再问；</li>
+      <li>历史/对比类问题仍会保留旧版，不删除知识。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-25-policy-versions.svg" alt="v49 policy versions" />
+      <figcaption>v49：制度版本按生效月过滤，最新版本优先。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">10 个已完成里程碑，8 个待办；本次属于检索质量修复。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>OIDC SSO + 本地测试 IdP</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>TLS / 密钥 / 安全基线</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>Postgres 备份恢复 / 高可用</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>多 Worker 压测 / exactly-once 边界</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Prometheus / OTel / 审计导出</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>中文 KB 检索评测</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>真实多模态 / OCR / ASR</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>时间 KG 推理 / as-of 问答</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

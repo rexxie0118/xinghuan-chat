@@ -10,6 +10,8 @@ RRF 不需要各分数可比，只依赖排名，天然鲁棒。
 
 from __future__ import annotations
 
+import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Sequence
@@ -37,6 +39,9 @@ class ChunkHit:
     graph_rank: int | None = None
     vector_score: float = 0.0
     fts_score: float = 0.0
+    effective_date: str = ""
+    doc_family: str = ""
+    source_uri: str = ""
 
     @property
     def citation(self) -> str:
@@ -57,6 +62,9 @@ class ChunkHit:
                 "graph": self.graph_rank,
             },
             "citation": self.citation,
+            "effective_date": self.effective_date,
+            "doc_family": self.doc_family,
+            "source_uri": self.source_uri,
         }
 
 
@@ -92,6 +100,89 @@ class RetrievalResult:
             ],
             "warnings": self.warnings,
         }
+
+
+YEAR_MONTH_RE = re.compile(r"(20\d{2})\s*[年./-]\s*(\d{1,2})")
+YEAR_RE = re.compile(r"(20\d{2})")
+DOC_YEAR_SUFFIX_RE = re.compile(r"[\s_\-]*(?:19|20)\d{2}(?:\s*年)?$")
+HISTORY_QUERY_RE = re.compile(r"历史|旧版|之前|以前|对比|变化|旧制度|上一版|20\d{2}\s*年")
+POLICY_TITLE_RE = re.compile(r"制度|政策|规定|办法|规范")
+
+
+def effective_date(title: str, text: str, source_uri: str = "", meta_json: str = "") -> str:
+    try:
+        meta = json.loads(meta_json or "{}")
+    except (TypeError, ValueError):
+        meta = {}
+    for key in ("effective_date", "doc_date", "published_at"):
+        value = str(meta.get(key) or "").strip()
+        if value:
+            match = YEAR_MONTH_RE.search(value) or YEAR_RE.search(value)
+            if match:
+                month = int(match.group(2)) if match.lastindex and match.lastindex >= 2 else 12
+                return f"{match.group(1)}-{month:02d}"
+    for value in (text[:240], title, source_uri):
+        match = YEAR_MONTH_RE.search(value or "")
+        if match:
+            return f"{match.group(1)}-{int(match.group(2)):02d}"
+        year = YEAR_RE.search(value or "")
+        if year:
+            return f"{year.group(1)}-12"
+    return ""
+
+
+def doc_family(title: str) -> str:
+    value = re.sub(r"\.(md|markdown|txt|text|rst|pdf|docx|pptx|xlsx|xlsm|xls)$", "", title or "", flags=re.I)
+    value = DOC_YEAR_SUFFIX_RE.sub("", value.strip())
+    return re.sub(r"[\s_\-]+", "", value) or (title or "")
+
+
+def _is_history_query(query: str) -> bool:
+    return bool(HISTORY_QUERY_RE.search(query or ""))
+
+
+def prefer_latest_policies(query: str, hits: list["ChunkHit"]) -> list["ChunkHit"]:
+    if _is_history_query(query):
+        return hits
+    family_dates: dict[str, set[str]] = {}
+    for hit in hits:
+        if hit.effective_date:
+            family_dates.setdefault(hit.doc_family, set()).add(hit.effective_date)
+    latest = {
+        family: max(dates) for family, dates in family_dates.items()
+        if len(dates) > 1
+    }
+    if latest:
+        hits = [
+            hit for hit in hits
+            if not hit.doc_family in latest
+            or not hit.effective_date
+            or hit.effective_date == latest[hit.doc_family]
+        ]
+
+    terms = [term for term in keyword_terms(query, min_len=2, limit=8) if len(term) >= 2]
+    policy_docs = [
+        hit for hit in hits
+        if hit.effective_date and POLICY_TITLE_RE.search(hit.doc_title)
+    ]
+    matching_policy = [
+        hit for hit in policy_docs
+        if any(term in hit.doc_title for term in terms)
+    ]
+    if matching_policy:
+        allowed = {hit.doc_id for hit in matching_policy}
+        title_terms = {
+            term for term in terms
+            if any(term in hit.doc_title for hit in matching_policy)
+        }
+        other_terms = [term for term in terms if term not in title_terms]
+        hits = [
+            hit for hit in hits
+            if hit.doc_id in allowed
+            or any(term in hit.doc_title for term in title_terms)
+            or any(term in hit.text for term in other_terms)
+        ]
+    return hits
 
 
 class Retriever:
@@ -288,8 +379,15 @@ class Retriever:
                     graph_rank=grank.get(cid),
                     vector_score=vscore.get(cid, 0.0),
                     fts_score=fscore.get(cid, 0.0),
+                    effective_date=effective_date(
+                        row["doc_title"], row["text"], row["source_uri"], row["meta_json"]
+                    ),
+                    doc_family=doc_family(row["doc_title"]),
+                    source_uri=row["source_uri"],
                 )
             )
+
+        hits = prefer_latest_policies(query, hits)
 
         do_rerank = bool(self.cfg.get("use_rerank", False)) if use_rerank is None else use_rerank
         if do_rerank and not self.provider.is_mock and len(hits) > 1:
@@ -322,7 +420,8 @@ class Retriever:
         ph = ",".join("?" for _ in chunk_ids)
         rows = self.conn.execute(
             f"""SELECT c.id, c.doc_id, c.heading_path, c.text, c.ord,
-                       d.title AS doc_title
+                       d.title AS doc_title, d.source_uri, d.meta_json,
+                       d.created_at AS doc_created_at
                 FROM chunks c JOIN documents d ON d.id = c.doc_id
                 WHERE c.id IN ({ph})""",
             list(chunk_ids),
