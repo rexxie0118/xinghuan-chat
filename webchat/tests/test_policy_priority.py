@@ -42,6 +42,20 @@ class PolicyPriorityTest(unittest.TestCase):
         out = prefer_latest_policies("2025年年假制度", [self.faq, self.old, self.new])
         self.assertEqual({h.doc_id for h in out}, {"d-faq", "d-old", "d-new"})
 
+    def test_general_document_versions_use_role_suffix(self):
+        old = hit("c-v1", "d-v1", "合同_v1", "旧合同", "2026-01")
+        new = hit("c-v2", "d-v2", "合同_v2", "新合同", "2026-06")
+        out = prefer_latest_policies("合同条款", [old, new])
+        self.assertEqual({h.doc_id for h in out}, {"d-v2"})
+
+    def test_undated_general_versions_use_mtime(self):
+        old = hit("c-old", "d-old", "会议纪要", "旧纪要")
+        new = hit("c-new", "d-new", "会议纪要_2026-03", "新纪要")
+        old.modified_at = "2026-01-10"
+        new.modified_at = "2026-03-20"
+        out = prefer_latest_policies("会议纪要", [old, new])
+        self.assertEqual({h.doc_id for h in out}, {"d-new"})
+
     def test_modified_at_from_meta(self):
         self.assertEqual(
             document_modified_at('{"source_mtime":"2026-11-25T13:00:00+00:00"}'),

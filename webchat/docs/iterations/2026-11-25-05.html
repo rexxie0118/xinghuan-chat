@@ -1,0 +1,91 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-25-05</div>
+    <h1>版本规则推广到所有文档</h1>
+    <p class="lede">
+      版本过滤不再只适用于制度：合同、会议纪要、方案、手册等只要属于同一文档族，
+      默认取最新版本；不同主题的文档不会互相过滤。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：131 项通过</span>
+      <span>架构：v51</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>版本族识别</h2>
+    <pre class="record-pre">年假制度_2026
+年假制度_2026-11
+年假制度-2026年10月
+合同_v2
+合同V2最终版
+会议纪要_2026-03
+→ 去掉版本后缀后进入同一族</pre>
+  </section>
+
+  <section>
+    <h2>排序规则</h2>
+    <pre class="record-pre">version key:
+  1. 正文/元数据里的生效日期
+  2. 没有日期 → 文件 mtime 月份
+  3. 生效月相同 → 文件 mtime 决胜
+
+同族多版本:
+  默认只保留最新版本
+
+历史查询:
+  "旧版 / 历史 / 对比 / 变化"
+  → 保留所有版本
+
+不同主题:
+  年假制度 ≠ 报销制度
+  → 不互相过滤</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>文件名没有版本标记、内容也没有日期时，无法可靠判断新旧；</li>
+      <li>文件 mtime 会被复制/重新上传改变，因此只做兜底；</li>
+      <li>政策类文档仍额外享受“制度优先于通用 FAQ”的排序；</li>
+      <li>产品库误传的旧版年假制度仍需单独删除。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">合同_v1 / 合同_v2 → v2
+会议纪要旧 / 会议纪要_2026-03 → 新
+年假制度 2025 / 2026 → 2026
+历史查询 → 保留多版本
+不同主题 → 不误过滤
+131 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-25-all-doc-versions.svg" alt="v51 all document versions" />
+      <figcaption>v51：版本规则推广到所有文档。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">10 个已完成里程碑，8 个待办；本次属于检索质量增强。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>OIDC SSO + 本地测试 IdP</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>TLS / 密钥 / 安全基线</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>Postgres 备份恢复 / 高可用</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>多 Worker 压测 / exactly-once 边界</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Prometheus / OTel / 审计导出</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>中文 KB 检索评测</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>真实多模态 / OCR / ASR</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>时间 KG 推理 / as-of 问答</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

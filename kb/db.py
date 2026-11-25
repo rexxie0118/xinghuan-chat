@@ -408,10 +408,18 @@ for _table in (
     PG_SCHEMA.extend([
         f"ALTER TABLE {_table} ENABLE ROW LEVEL SECURITY",
         f"ALTER TABLE {_table} FORCE ROW LEVEL SECURITY",
-        f"DROP POLICY IF EXISTS kb_isolation ON {_table}",
-        f"CREATE POLICY kb_isolation ON {_table} USING "
-        "(kb_id = current_setting('app.kb_id', true)) WITH CHECK "
-        "(kb_id = current_setting('app.kb_id', true))",
+        f"""DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = current_schema()
+              AND tablename = '{_table}' AND policyname = 'kb_isolation'
+          ) THEN
+            CREATE POLICY kb_isolation ON {_table} USING
+              (kb_id = current_setting('app.kb_id', true)) WITH CHECK
+              (kb_id = current_setting('app.kb_id', true));
+          END IF;
+        END $$""",
     ])
 
 
@@ -552,28 +560,37 @@ def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
-    with conn:  # 单事务建表
-        for stmt in (PG_SCHEMA if getattr(conn, "is_postgres", False) else SCHEMA):
-            conn.execute(stmt)
-        row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
-        if row is None:
+    is_postgres = bool(getattr(conn, "is_postgres", False))
+    # Multiple KB services bootstrap in parallel at startup. Serialize DDL and
+    # policy creation so two processes cannot race on CREATE POLICY.
+    if is_postgres:
+        conn.execute("SELECT pg_advisory_lock(?)", (817263451,))
+    try:
+        with conn:  # 单事务建表
+            for stmt in (PG_SCHEMA if is_postgres else SCHEMA):
+                conn.execute(stmt)
+            row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+            if row is None:
+                conn.execute(
+                    "INSERT INTO meta(key, value) VALUES('schema_version', ?)",
+                    (str(SCHEMA_VERSION),),
+                )
+            if not is_postgres:
+                _ensure_columns(
+                    conn,
+                    "memories_draft",
+                    {
+                        "similarity": "REAL NOT NULL DEFAULT 0",
+                        "reviewed": "TEXT NOT NULL DEFAULT ''",
+                    },
+                )
+            _seed_core_types(conn)
             conn.execute(
-                "INSERT INTO meta(key, value) VALUES('schema_version', ?)",
-                (str(SCHEMA_VERSION),),
+                "INSERT INTO meta(key, value) VALUES('created_at', ?) ON CONFLICT DO NOTHING", (iso(),)
             )
-        if not getattr(conn, "is_postgres", False):
-            _ensure_columns(
-                conn,
-                "memories_draft",
-                {
-                    "similarity": "REAL NOT NULL DEFAULT 0",
-                    "reviewed": "TEXT NOT NULL DEFAULT ''",
-                },
-            )
-        _seed_core_types(conn)
-        conn.execute(
-            "INSERT INTO meta(key, value) VALUES('created_at', ?) ON CONFLICT DO NOTHING", (iso(),)
-        )
+    finally:
+        if is_postgres:
+            conn.execute("SELECT pg_advisory_unlock(?)", (817263451,))
 
 
 def _seed_core_types(conn: sqlite3.Connection) -> None:

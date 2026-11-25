@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-25-05",
+      "title": "版本规则推广到所有文档",
+      "date": "2026-11-25",
+      "summary": "合同/纪要/方案等同族文档默认取最新；不同主题不互相过滤。",
+      "record": "iterations/2026-11-25-05.html",
+      "diagrams": [
+        "architecture/2026-11-25-all-doc-versions.svg"
+      ]
+    },
+    {
       "id": "2026-11-25-04",
       "title": "文件更新时间作为制度版本参考",
       "date": "2026-11-25",
@@ -870,6 +880,13 @@
       "date": "2026-11-25",
       "src": "architecture/2026-11-25-file-mtime.svg",
       "note": "制度版本按生效月优先，文件更新时间兜底/同月决胜。"
+    },
+    {
+      "id": "2026-11-25-v51",
+      "label": "v51 · All Document Versions",
+      "date": "2026-11-25",
+      "src": "architecture/2026-11-25-all-doc-versions.svg",
+      "note": "同族文档最新版本胜出；不同主题不误过滤。"
     }
   ]
 }

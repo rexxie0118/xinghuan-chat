@@ -108,7 +108,10 @@ class RetrievalResult:
 
 YEAR_MONTH_RE = re.compile(r"(20\d{2})\s*[年./-]\s*(\d{1,2})")
 YEAR_RE = re.compile(r"(20\d{2})")
-DOC_YEAR_SUFFIX_RE = re.compile(r"[\s_\-]*(?:19|20)\d{2}(?:\s*年)?$")
+DOC_VERSION_SUFFIX_RE = re.compile(
+    r"[\s_\-]*(?:(?:19|20)\d{2}(?:\s*年)?(?:[\s_\-]*\d{1,2}(?:\s*月)?)?|v\d+(?:\.\d+)*)(?:\s*(?:修订|版|版次|final|最终版?))?$",
+    re.I,
+)
 HISTORY_QUERY_RE = re.compile(r"历史|旧版|之前|以前|对比|变化|旧制度|上一版|20\d{2}\s*年")
 POLICY_TITLE_RE = re.compile(r"制度|政策|规定|办法|规范")
 
@@ -137,7 +140,7 @@ def effective_date(title: str, text: str, source_uri: str = "", meta_json: str =
 
 def doc_family(title: str) -> str:
     value = re.sub(r"\.(md|markdown|txt|text|rst|pdf|docx|pptx|xlsx|xlsm|xls)$", "", title or "", flags=re.I)
-    value = DOC_YEAR_SUFFIX_RE.sub("", value.strip())
+    value = DOC_VERSION_SUFFIX_RE.sub("", value.strip())
     return re.sub(r"[\s_\-]+", "", value) or (title or "")
 
 
