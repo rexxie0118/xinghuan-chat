@@ -1,0 +1,98 @@
+<article class="iteration">
+  <header class="iteration-head">
+    <div class="eyebrow">ITERATION · 2026-11-25-04</div>
+    <h1>文件更新时间作为制度版本参考</h1>
+    <p class="lede">
+      制度文档的生效月仍是第一优先级；文件的最后更新时间作为兜底：
+      没有生效月时用它判断新旧，同一生效月时用它做决胜。
+    </p>
+    <div class="meta-row">
+      <span>状态：已完成</span>
+      <span>测试：129 项通过</span>
+      <span>架构：v50</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>规则</h2>
+    <pre class="record-pre">version key:
+  effective_date or file_mtime_month
+  + file_mtime as tiebreaker
+
+1. 文档有明确生效月
+   → 生效月优先
+
+2. 没有生效月
+   → 文件 mtime 兜底
+
+3. 生效月相同
+   → 较新的文件 mtime 胜出
+
+4. 用户问历史/旧版
+   → 保留多个版本</pre>
+  </section>
+
+  <section>
+    <h2>采集</h2>
+    <pre class="record-pre">ingest_file:
+  path.stat().st_mtime
+  → documents.meta_json.source_mtime
+
+旧文档:
+  bootstrap unchanged 时自动回填
+  source_mtime
+
+检索:
+  document_modified_at(meta_json, source_uri)
+  → 磁盘 stat 兜底</pre>
+  </section>
+
+  <section>
+    <h2>边界</h2>
+    <ul>
+      <li>文件 mtime 可能因复制/解压/重新上传而改变，所以不能压过文档内明确生效月；</li>
+      <li>mtime 只精确到文件系统时间，不表达业务生效日；</li>
+      <li>历史查询不会被过滤，仍可对比旧版；</li>
+      <li>产品库仍有一份误传旧版，需单独删除。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>验证</h2>
+    <pre class="record-pre">hr 年假制度_2026
+  effective_date=2026-10
+  modified_at=2026-11-25
+  → 命中第一
+
+hr 历史查询
+  → 2025 旧版仍保留
+
+129 tests passed</pre>
+  </section>
+
+  <section>
+    <h2>架构变化</h2>
+    <figure class="diagram">
+      <img src="/docs/architecture/2026-11-25-file-mtime.svg" alt="v50 file mtime" />
+      <figcaption>v50：生效月优先，文件 mtime 兜底与同月决胜。</figcaption>
+    </figure>
+  </section>
+
+  <section id="todo">
+    <h2>Todo 快照</h2>
+    <p class="muted">10 个已完成里程碑，8 个待办；本次属于检索质量增强。</p>
+    <table class="todo-table">
+      <thead><tr><th>优先级</th><th>事项</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>OIDC SSO + 本地测试 IdP</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>TLS / 密钥 / 安全基线</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P0</td><td>Postgres 备份恢复 / 高可用</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>多 Worker 压测 / exactly-once 边界</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>Prometheus / OTel / 审计导出</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P1</td><td>中文 KB 检索评测</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>真实多模态 / OCR / ASR</td><td><span class="status pending">待办</span></td></tr>
+        <tr><td>P2</td><td>时间 KG 推理 / as-of 问答</td><td><span class="status pending">待办</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

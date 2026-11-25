@@ -11,8 +11,10 @@ RRF 不需要各分数可比，只依赖排名，天然鲁棒。
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
@@ -40,6 +42,7 @@ class ChunkHit:
     vector_score: float = 0.0
     fts_score: float = 0.0
     effective_date: str = ""
+    modified_at: str = ""
     doc_family: str = ""
     source_uri: str = ""
 
@@ -63,6 +66,7 @@ class ChunkHit:
             },
             "citation": self.citation,
             "effective_date": self.effective_date,
+            "modified_at": self.modified_at,
             "doc_family": self.doc_family,
             "source_uri": self.source_uri,
         }
@@ -137,6 +141,27 @@ def doc_family(title: str) -> str:
     return re.sub(r"[\s_\-]+", "", value) or (title or "")
 
 
+def document_modified_at(meta_json: str = "", source_uri: str = "") -> str:
+    """File last-modified date, stored at ingest time or read from disk."""
+    try:
+        meta = json.loads(meta_json or "{}")
+    except (TypeError, ValueError):
+        meta = {}
+    value = str(meta.get("source_mtime") or "").strip()
+    if value:
+        return value[:10]
+    try:
+        return datetime.fromtimestamp(os.stat(source_uri).st_mtime).strftime("%Y-%m-%d")
+    except OSError:
+        return ""
+
+
+def _version_key(hit: "ChunkHit") -> tuple[str, str]:
+    # Explicit effective month wins; file mtime is the fallback and tiebreaker.
+    primary = hit.effective_date or (hit.modified_at[:7] if hit.modified_at else "")
+    return primary, hit.modified_at
+
+
 def _is_history_query(query: str) -> bool:
     return bool(HISTORY_QUERY_RE.search(query or ""))
 
@@ -144,20 +169,21 @@ def _is_history_query(query: str) -> bool:
 def prefer_latest_policies(query: str, hits: list["ChunkHit"]) -> list["ChunkHit"]:
     if _is_history_query(query):
         return hits
-    family_dates: dict[str, set[str]] = {}
+    family_versions: dict[str, dict[str, tuple[str, str]]] = {}
     for hit in hits:
-        if hit.effective_date:
-            family_dates.setdefault(hit.doc_family, set()).add(hit.effective_date)
-    latest = {
-        family: max(dates) for family, dates in family_dates.items()
-        if len(dates) > 1
-    }
+        key = _version_key(hit)
+        if key[0] or key[1]:
+            family_versions.setdefault(hit.doc_family, {})[hit.doc_id] = key
+    latest: dict[str, tuple[str, str]] = {}
+    for family, versions in family_versions.items():
+        if len(versions) > 1:
+            latest[family] = max(versions.values())
     if latest:
         hits = [
             hit for hit in hits
-            if not hit.doc_family in latest
-            or not hit.effective_date
-            or hit.effective_date == latest[hit.doc_family]
+            if hit.doc_family not in latest
+            or not any(_version_key(hit))
+            or _version_key(hit) == latest[hit.doc_family]
         ]
 
     terms = [term for term in keyword_terms(query, min_len=2, limit=8) if len(term) >= 2]
@@ -382,6 +408,7 @@ class Retriever:
                     effective_date=effective_date(
                         row["doc_title"], row["text"], row["source_uri"], row["meta_json"]
                     ),
+                    modified_at=document_modified_at(row["meta_json"], row["source_uri"]),
                     doc_family=doc_family(row["doc_title"]),
                     source_uri=row["source_uri"],
                 )

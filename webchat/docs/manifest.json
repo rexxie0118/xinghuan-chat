@@ -3,6 +3,16 @@
   "updated_at": "2026-11-24",
   "iterations": [
     {
+      "id": "2026-11-25-04",
+      "title": "文件更新时间作为制度版本参考",
+      "date": "2026-11-25",
+      "summary": "生效月优先，文件 mtime 兜底与同月决胜；旧文档自动回填 source_mtime。",
+      "record": "iterations/2026-11-25-04.html",
+      "diagrams": [
+        "architecture/2026-11-25-file-mtime.svg"
+      ]
+    },
+    {
       "id": "2026-11-25-03",
       "title": "制度版本优先级：最新生效月胜出",
       "date": "2026-11-25",
@@ -853,6 +863,13 @@
       "date": "2026-11-25",
       "src": "architecture/2026-11-25-policy-versions.svg",
       "note": "制度文档按生效月选择最新版本；历史查询保留旧版。"
+    },
+    {
+      "id": "2026-11-25-v50",
+      "label": "v50 · File mtime",
+      "date": "2026-11-25",
+      "src": "architecture/2026-11-25-file-mtime.svg",
+      "note": "制度版本按生效月优先，文件更新时间兜底/同月决胜。"
     }
   ]
 }

@@ -618,11 +618,12 @@ class AgentRunner:
         for index, hit in enumerate(hits, 1):
             text = " ".join((hit.get("text") or "").split())[:1000]
             heading = f" › {hit.get('heading_path')}" if hit.get("heading_path") else ""
-            effective = (
-                f"（生效 {hit.get('effective_date')}）"
-                if hit.get("effective_date")
-                else ""
-            )
+            date_bits = []
+            if hit.get("effective_date"):
+                date_bits.append(f"生效 {hit['effective_date']}")
+            if hit.get("modified_at"):
+                date_bits.append(f"文件更新 {hit['modified_at']}")
+            effective = f"（{' · '.join(date_bits)}）" if date_bits else ""
             evidence.append(
                 f"[{index}] 《{hit.get('doc_title', '')}》{heading}{effective}\n{text}"
             )
@@ -1378,11 +1379,12 @@ class AgentRunner:
                 if hit.get("heading_path")
                 else ""
             )
-            effective = (
-                f"（生效 {hit.get('effective_date')}）"
-                if hit.get("effective_date")
-                else ""
-            )
+            date_bits = []
+            if hit.get("effective_date"):
+                date_bits.append(f"生效 {hit['effective_date']}")
+            if hit.get("modified_at"):
+                date_bits.append(f"文件更新 {hit['modified_at']}")
+            effective = f"（{' · '.join(date_bits)}）" if date_bits else ""
             evidence.append(
                 f"[{index}] 《{hit.get('doc_title', '')}》{heading}{effective}\n{text}"
             )

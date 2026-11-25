@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -146,6 +148,7 @@ class Ingester:
             source_uri=path.resolve().as_posix(),
             doc_type=doc_type or parsed.doc_type,
             force=force,
+            source_mtime=path.stat().st_mtime,
         )
 
     def ingest_text(
@@ -156,6 +159,7 @@ class Ingester:
         source_uri: str,
         doc_type: str = "note",
         force: bool = False,
+        source_mtime: float | None = None,
     ) -> DocReport:
         text = normalize_text(text)
         if not text:
@@ -163,8 +167,26 @@ class Ingester:
         digest = content_hash(text)
         doc_id = make_id("doc", source_uri)
         existing = self.conn.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
+        file_meta: dict[str, Any] = {}
+        if source_mtime:
+            file_meta["source_mtime"] = datetime.fromtimestamp(
+                source_mtime, tz=timezone.utc
+            ).isoformat()
+        meta_json = json.dumps(file_meta, ensure_ascii=False) if file_meta else "{}"
 
         if existing is not None and existing["content_hash"] == digest and not force:
+            # Backfill file mtime for documents ingested before it was tracked.
+            if file_meta:
+                try:
+                    current = json.loads(existing["meta_json"] or "{}")
+                except (TypeError, ValueError):
+                    current = {}
+                if not current.get("source_mtime"):
+                    current.update(file_meta)
+                    self.conn.execute(
+                        "UPDATE documents SET meta_json=? WHERE id=?",
+                        (json.dumps(current, ensure_ascii=False), doc_id),
+                    )
             return DocReport(
                 source_uri=source_uri, title=existing["title"], status="unchanged",
                 chunks=self.conn.execute(
@@ -183,8 +205,8 @@ class Ingester:
             " created_at, updated_at, meta_json) VALUES(?,?,?,?,?,?,?,?,?)"
             f" ON CONFLICT({conflict}) DO UPDATE SET title=excluded.title, doc_type=excluded.doc_type,"
             " content=excluded.content, content_hash=excluded.content_hash,"
-            " updated_at=excluded.updated_at",
-            (doc_id, source_uri, title, doc_type, text, digest, ts, ts, "{}"),
+            " updated_at=excluded.updated_at, meta_json=excluded.meta_json",
+            (doc_id, source_uri, title, doc_type, text, digest, ts, ts, meta_json),
         )
 
         chunks = chunk_markdown(

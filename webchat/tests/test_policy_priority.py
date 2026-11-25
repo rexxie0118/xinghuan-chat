@@ -3,7 +3,13 @@ from __future__ import annotations
 
 import unittest
 
-from kb.retrieval import ChunkHit, doc_family, effective_date, prefer_latest_policies
+from kb.retrieval import (
+    ChunkHit,
+    doc_family,
+    document_modified_at,
+    effective_date,
+    prefer_latest_policies,
+)
 
 
 def hit(chunk_id: str, doc_id: str, title: str, text: str, date: str = "") -> ChunkHit:
@@ -35,6 +41,20 @@ class PolicyPriorityTest(unittest.TestCase):
     def test_history_query_keeps_versions(self):
         out = prefer_latest_policies("2025年年假制度", [self.faq, self.old, self.new])
         self.assertEqual({h.doc_id for h in out}, {"d-faq", "d-old", "d-new"})
+
+    def test_modified_at_from_meta(self):
+        self.assertEqual(
+            document_modified_at('{"source_mtime":"2026-11-25T13:00:00+00:00"}'),
+            "2026-11-25",
+        )
+
+    def test_file_mtime_tiebreaks_same_effective_month(self):
+        old = hit("c-old", "d-old", "年假制度", "旧", "2026-10")
+        new = hit("c-new", "d-new", "年假制度_2026", "新", "2026-10")
+        old.modified_at = "2026-10-01"
+        new.modified_at = "2026-11-25"
+        out = prefer_latest_policies("年假有几天", [old, new])
+        self.assertEqual({h.doc_id for h in out}, {"d-new"})
 
     def test_other_topic_keeps_faq(self):
         out = prefer_latest_policies("年假和病假", [self.faq, self.old, self.new])
